@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     # MongoDB
     MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB: str = "fastapi_db"
+    
+    # PostgreSQL
+    POSTGRES_URI: str = "postgresql+asyncpg://postgres:8UD18ud1@localhost:5432/backend"
 
     class Config:
         env_file = ".env"
