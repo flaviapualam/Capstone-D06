@@ -23,6 +23,18 @@ CREATE TABLE ai_model (
 );
 
 CREATE TABLE sensor (
-    sensor_id UUID PRIMARY KEY uuid_generate_v4(),
+    sensor_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     status INT
-)
+);
+
+CREATE TABLE clean_data (
+    time_generated TIMESTAMP NOT NULL,
+    cow_id UUID NOT NULL,
+    sensor_id UUID NOT NULL,
+    eat_duration INT,
+    eat_speed INT,
+    anomaly_score FLOAT,
+    PRIMARY KEY (time_generated, cow_id, sensor_id),
+    FOREIGN KEY (cow_id) REFERENCES cow(cow_id) ON DELETE CASCADE,
+    FOREIGN KEY (sensor_id) REFERENCES sensor(sensor_id)
+);
