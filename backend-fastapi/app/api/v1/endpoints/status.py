@@ -1,3 +1,4 @@
+# app/api/v1/endpoints/status.py
 from fastapi import APIRouter, Depends
 from app.core.database import db_instance, get_pg_session
 from sqlalchemy.ext.asyncio import AsyncSession
