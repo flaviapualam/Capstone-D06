@@ -4,3 +4,5 @@ SQLAlchemy>=2.0
 asyncpg
 pydantic
 pydantic-settings
+paho-mqtt<2.0.0
+motor
