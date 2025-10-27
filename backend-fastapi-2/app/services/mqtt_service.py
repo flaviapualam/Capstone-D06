@@ -29,28 +29,48 @@ def create_on_message(loop):
         try:
             print(f"📩 Message received on {msg.topic}. Payload type: {type(msg.payload)}")
 
-            if isinstance(msg.payload, bytes):
-                payload = json.loads(msg.payload.decode())
-            else:
+            if not isinstance(msg.payload, bytes):
                 print("❌ Payload is not in expected byte format.")
                 return
 
-            print(f"📩 Received on {msg.topic}: {payload}")
+            decoded = msg.payload.decode("utf-8").strip()
+            print(f"📩 Raw payload: {decoded}")
 
-            document = {
-                "sensor_id": payload.get("sensor_id"),
-                "location": payload.get("location"),
-                "temperature": payload.get("temperature"),
-                "humidity": payload.get("humidity"),
-                "timestamp": datetime.utcnow().isoformat(),
-                "topic": msg.topic
-            }
+            # Pisahkan jika ada beberapa JSON dalam satu payload
+            # Contoh: {"a":1}\n{"a":2}
+            json_chunks = []
+            buffer = ""
 
-            # Jalankan coroutine di loop utama (thread-safe)
-            asyncio.run_coroutine_threadsafe(save_to_mongo(document), loop)
+            for line in decoded.splitlines():
+                buffer += line.strip()
+                if buffer.count("{") == buffer.count("}"):
+                    json_chunks.append(buffer)
+                    buffer = ""
+
+            if buffer:  # jika masih ada sisa JSON tidak lengkap
+                print(f"⚠️ Incomplete JSON skipped: {buffer}")
+
+            for chunk in json_chunks:
+                try:
+                    payload = json.loads(chunk)
+                    if not isinstance(payload, dict):
+                        payload = {"raw_payload": payload}
+
+                    document = {
+                        **payload,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "topic": msg.topic
+                    }
+
+                    print(f"✅ Parsed document: {document}")
+                    asyncio.run_coroutine_threadsafe(save_to_mongo(document), loop)
+
+                except json.JSONDecodeError as e:
+                    print(f"❌ Failed to decode chunk: {chunk} ({e})")
 
         except Exception as e:
             print(f"❌ Error handling MQTT message: {e}")
+
     return on_message
 
 
