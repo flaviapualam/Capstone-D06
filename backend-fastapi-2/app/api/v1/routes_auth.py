@@ -1,25 +1,43 @@
 # app/api/v1/routes_auth.py
-from fastapi import APIRouter, Depends, Response
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.schemas.auth_schema import FarmerCreate, FarmerLogin, FarmerOut, Token
+from fastapi import APIRouter, Depends, Request, Response, HTTPException
+from app.core.database import get_postgres_conn
 from app.services.auth_service import register_farmer, authenticate_farmer
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.post("/register", response_model=FarmerOut, status_code=201)
-async def register(farmer: FarmerCreate, db:AsyncSession = Depends(get_db)):
-    return await register_farmer(db, farmer)
 
-@router.post("/login", response_model=Token)
-async def login(response: Response, farmer: FarmerLogin, db: AsyncSession = Depends(get_db)):
-    token_data = await authenticate_farmer(db, farmer.email, farmer.password)
+@router.post("/register")
+async def register(request: Request, conn=Depends(get_postgres_conn)):
+    body = await request.json()
+    name = body.get("name")
+    email = body.get("email")
+    password = body.get("password")
+
+    if not name or not email or not password:
+        raise HTTPException(status_code=400, detail="name, email, and password required")
+
+    new_farmer = await register_farmer(conn, name, email, password)
+    return {"message": "Farmer registered successfully", "data": new_farmer}
+
+
+@router.post("/login")
+async def login(request: Request, response: Response, conn=Depends(get_postgres_conn)):
+    body = await request.json()
+    email = body.get("email")
+    password = body.get("password")
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="email and password required")
+
+    farmer = await authenticate_farmer(conn, email, password)
+    if not farmer:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
     response.set_cookie(
-        key="access_token",
-        value=token_data["access_token"],
+        key="farmer_id",
+        value=str(farmer["farmer_id"]),
         httponly=True,
-        secure=False,
-        samesite="lax",
-        max_age=3600*12,
+        samesite="lax"
     )
-    return token_data
+
+    return {"message": "Login successful"}

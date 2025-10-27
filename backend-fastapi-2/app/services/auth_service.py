@@ -1,33 +1,33 @@
 # app/services/auth_service.py
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from app.models.auth_farmer import Farmer 
-from app.schemas.auth_schema import FarmerCreate
-from app.core.security import hash_password, verify_password, create_access_token
+from app.core.security import hash_password, verify_password
 from fastapi import HTTPException, status
+import uuid
 
-async def register_farmer(db: AsyncSession, farmer: FarmerCreate):
-    result = await db.execute(select(Farmer).where(Farmer.email == farmer.email))
-    existing_farmer = result.scalar_one_or_none()
-    if existing_farmer:
+async def register_farmer(conn, name: str, email: str, password: str):
+    query_check = "SELECT * FROM auth.farmer WHERE email = $1"
+    existing = await conn.fetchrow(query_check, email)
+    if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    new_farmer = Farmer(
-        name=farmer.name,
-        email=farmer.email,
-        password_hash=hash_password(farmer.password)
-    )
 
-    db.add(new_farmer)
-    await db.commit()
-    await db.refresh(new_farmer)
-    return new_farmer
+    hashed_pw = hash_password(password)
+    farmer_id = str(uuid.uuid4())
 
-async def authenticate_farmer(db: AsyncSession, email:str, password:str):
-    result = await db.execute(select(Farmer).where(Farmer.email == email))
-    farmer = result.scalar_one_or_none()
-    if not farmer or not verify_password(password, farmer.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    access_token = create_access_token({"sub": str(farmer.farmer_id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    query_insert = """
+        INSERT INTO auth.farmer (farmer_id, name, email, password_hash)
+        VALUES ($1, $2, $3, $4)
+        RETURNING farmer_id, name, email
+    """
+    record = await conn.fetchrow(query_insert, farmer_id, name, email, hashed_pw)
+    return dict(record)
 
+async def authenticate_farmer(conn, email: str, password: str):
+    query = "SELECT farmer_id, name, email, password_hash FROM auth.farmer WHERE email = $1"
+    farmer = await conn.fetchrow(query, email)
+
+    if not farmer:
+        return None
+
+    if not verify_password(password, farmer["password_hash"]):
+        return None
+
+    return dict(farmer)
