@@ -1,6 +1,7 @@
+# app/core/database.py
 from motor.motor_asyncio import AsyncIOMotorClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
 
@@ -22,11 +23,22 @@ async def close_mongo_connection():
     db_instance.client.close()
     print("MongoDB connection is closed")
 
-    # -----------------
+# -----------------
 # PostgreSQL
 # -----------------
-engine = create_async_engine(settings.POSTGRES_URI, echo=True, future=True)
-AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+Base = declarative_base()
+
+engine = create_async_engine(
+    settings.POSTGRES_URI, 
+    echo=True, 
+    future=True
+)
+
+AsyncSessionLocal = sessionmaker(
+    bind=engine, 
+    class_=AsyncSession, 
+    expire_on_commit=False
+)
 
 async def get_pg_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
@@ -35,7 +47,7 @@ async def get_pg_session() -> AsyncSession:
 async def connect_to_postgres():
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(lambda _: None)  # simple test
+            await conn.run_sync(lambda _: None)
         print(" Connected to PostgreSQL")
     except Exception as e:
         print(f" PostgreSQL connection error: {e}")
