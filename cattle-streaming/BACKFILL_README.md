@@ -2,20 +2,42 @@
 
 Generate historical mock data for the cattle-streaming system without using MQTT.
 
+## 🎯 Quick Choice
+
+### Use `backfill.py` (Default)
+For **MQTT flow testing & load testing**
+- Feed: 5–7 kg, Sessions: 5–10 min, Rate: 0–2 kg/hr
+- High message frequency (good for testing)
+- Many short RFID sessions (~20 per meal)
+
+### Use `backfill_realistic.py` (Realistic)
+For **Analytics & production-like data**
+- Feed: 8–12 kg, Sessions: 20–40 min, Rate: 18–24 kg/hr
+- Realistic cow feeding (meal completes in one session)
+- Lower message volume (realistic)
+
+See [`FEEDING_COMPARISON.md`](./FEEDING_COMPARISON.md) for detailed comparison.
+
 ## Overview
 
-The backfill agent creates synthetic time-series data for 3 cows (cow1, cow2, cow3) over N days, directly inserting into MongoDB. It simulates:
+The backfill agents create synthetic time-series data for 3 cows (cow1, cow2, cow3) over N days, directly inserting into MongoDB.
 
+### Default Mode (`backfill.py`)
 - **Feeding pulses**: 08:00 & 14:00 WIB daily (5–7 kg feed per pulse)
-- **RFID sessions**: Random 5–10 minute windows around each pulse (±10 min jitter)
-- **Consumption**: 0–2 kg/hr during sessions, sampled at 1-second intervals
-- **Temperature**: Ambient 26–30°C with noise
-- **Weight**: Represents remaining feed in hopper (load-cell reading)
+- **RFID sessions**: 5–10 minute windows (±10 min jitter)
+- **Consumption**: 0–2 kg/hr during sessions
+- **Use case**: Testing MQTT flow, load testing
+
+### Realistic Mode (`backfill_realistic.py`)
+- **Feeding pulses**: 08:00 & 14:00 WIB daily (8–12 kg feed per pulse)
+- **RFID sessions**: 20–40 minute windows (realistic meal duration)
+- **Consumption**: 18–24 kg/hr during sessions (realistic eating rate)
+- **Use case**: Analytics, production-like data
 
 ## Usage
 
 ```bash
-# Generate 7 days of backfill data (default)
+# Generate 7 days (DEFAULT - high frequency)
 python3 backfill.py
 
 # Generate 14 days and clear existing data
@@ -23,6 +45,14 @@ python3 backfill.py --days 14 --clear
 
 # Generate 30 days
 python3 backfill.py --days 30
+
+# === REALISTIC MODE ===
+
+# Generate 7 days (REALISTIC pattern)
+python3 backfill_realistic.py
+
+# Generate 14 days and clear
+python3 backfill_realistic.py --days 14 --clear
 ```
 
 ## Output Example
