@@ -6,7 +6,7 @@ from app.core.database import (
     connect_to_mongo,
     close_mongo_connection,
 )
-from app.api.v1 import routes_auth
+from app.api.v1 import routes_auth, routes_farm
 from app.services.mqtt_service import start_mqtt
 import asyncio
 
@@ -44,3 +44,4 @@ async def shutdown_event():
 
 # Register all routers
 app.include_router(routes_auth.router)
+app.include_router(routes_farm.router)
