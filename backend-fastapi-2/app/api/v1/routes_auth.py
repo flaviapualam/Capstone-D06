@@ -1,35 +1,52 @@
 # app/api/v1/routes_auth.py
-from fastapi import APIRouter, Depends, Request, Response, HTTPException
+from fastapi import APIRouter, Depends, Response, HTTPException
 from app.core.database import get_postgres_conn
 from app.services.auth_service import register_farmer, authenticate_farmer
+from app.schemas import (
+    RegisterRequest,
+    LoginRequest,
+    RegisterResponse,
+    LoginResponse,
+    FarmerResponse
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/register")
-async def register(request: Request, conn=Depends(get_postgres_conn)):
-    body = await request.json()
-    name = body.get("name")
-    email = body.get("email")
-    password = body.get("password")
+@router.post("/register", response_model=RegisterResponse)
+async def register(
+    request: RegisterRequest,
+    conn=Depends(get_postgres_conn)
+):
+    """
+    Register a new farmer account.
 
-    if not name or not email or not password:
-        raise HTTPException(status_code=400, detail="name, email, and password required")
+    - **name**: Farmer's full name
+    - **email**: Valid email address (must be unique)
+    - **password**: Password with minimum 6 characters
+    """
+    new_farmer = await register_farmer(conn, request.name, request.email, request.password)
+    return RegisterResponse(
+        message="Farmer registered successfully",
+        data=FarmerResponse(**new_farmer)
+    )
 
-    new_farmer = await register_farmer(conn, name, email, password)
-    return {"message": "Farmer registered successfully", "data": new_farmer}
 
+@router.post("/login", response_model=LoginResponse)
+async def login(
+    request: LoginRequest,
+    response: Response,
+    conn=Depends(get_postgres_conn)
+):
+    """
+    Login with email and password.
 
-@router.post("/login")
-async def login(request: Request, response: Response, conn=Depends(get_postgres_conn)):
-    body = await request.json()
-    email = body.get("email")
-    password = body.get("password")
+    - **email**: Registered email address
+    - **password**: Account password
 
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="email and password required")
-
-    farmer = await authenticate_farmer(conn, email, password)
+    Returns farmer information and sets an HTTP-only cookie for session management.
+    """
+    farmer = await authenticate_farmer(conn, request.email, request.password)
     if not farmer:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -40,4 +57,9 @@ async def login(request: Request, response: Response, conn=Depends(get_postgres_
         samesite="lax"
     )
 
-    return {"message": "Login successful"}
+    return LoginResponse(
+        message="Login successful",
+        farmer_id=farmer["farmer_id"],
+        name=farmer["name"],
+        email=farmer["email"]
+    )

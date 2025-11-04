@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     MQTT_BROKER: str
     MQTT_PORT: int
     MQTT_TOPIC: str
+    SECRET_KEY: str = "MASAZWAR"  # Default value for development, override in .env
 
     class Config:
         env_file = ".env"
