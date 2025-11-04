@@ -1,13 +1,13 @@
-# Cattle Monitoring System
+# Cattle Monitoring System - Frontend
 
-A modern, responsive cattle monitoring and management system built with Next.js 15, TypeScript, and Tailwind CSS.
+A modern, responsive cattle monitoring dashboard built with Next.js 15, TypeScript, and Tailwind CSS.
 
 ## 🚀 Features
 
-- **User Authentication**: Secure login and registration system
-- **Cattle Management**: Register and manage cattle information
-- **Real-time Monitoring**: Monitor cattle health, location, and activity
-- **Alert System**: Automated alerts for health and safety concerns
+- **User Authentication**: Secure login and registration with HTTP-only cookies
+- **Cattle Management**: Register, view, edit, and delete cattle records
+- **Real-time Monitoring**: Monitor cattle eating patterns and temperature
+- **Time-Range Analysis**: Filter monitoring data (Today, Last 2 Days, Last 7 Days, Last 30 Days, All Data)
 - **Responsive Design**: Works seamlessly on desktop and mobile devices
 - **Modern UI**: Built with Radix UI components and Tailwind CSS
 
@@ -18,55 +18,59 @@ A modern, responsive cattle monitoring and management system built with Next.js 
 - **Styling**: Tailwind CSS v4
 - **UI Components**: Radix UI
 - **Icons**: Lucide React
-- **State Management**: React Context API
+- **Charts**: Recharts
+- **State Management**: React Context API (useAuth hook)
+- **HTTP Client**: Fetch API with custom wrapper
 - **Development Tools**: ESLint, Prettier
 
 ## 📦 Project Structure
 
 ```
 frontend/
-├── app/                    # Next.js app directory
-│   ├── api/               # API routes
-│   ├── components/        # React components
-│   │   ├── ui/           # Reusable UI components
-│   │   ├── features/     # Feature-specific components
-│   │   └── layout/       # Layout components
-│   ├── globals.css       # Global styles
-│   ├── layout.tsx        # Root layout
-│   └── page.tsx          # Home page
-├── hooks/                 # Custom React hooks
-├── lib/                   # Utility functions and API client
-├── types/                 # TypeScript type definitions
-└── public/                # Static assets
+├── app/
+│   ├── (auth)/              # Authentication routes
+│   ├── (dashboard)/         # Dashboard routes
+│   ├── components/          # React components
+│   │   ├── ui/             # Reusable UI components
+│   │   ├── CattleRegistrationModal.tsx
+│   │   ├── CattleEditModal.tsx
+│   │   ├── ChooseCowSection.tsx
+│   │   ├── RecordDataSection.tsx
+│   │   ├── Dashboard.tsx
+│   │   └── Toast.tsx        # Notification system
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── login/page.tsx
+│   └── favicon.ico
+├── hooks/
+│   └── use-auth.tsx         # Authentication context
+├── lib/
+│   ├── api.ts               # Backend API client
+│   └── utils.ts
+├── types/
+│   └── index.ts             # TypeScript interfaces
+├── public/
+└── package.json
 ```
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
+- Backend API running on http://localhost:8000
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd frontend
-   ```
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server**
-   ```bash
-   npm run dev
-   ```
-
-4. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
+Navigate to [http://localhost:3000](http://localhost:3000)
 
 ## 📝 Available Scripts
 
@@ -74,102 +78,70 @@ frontend/
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors
-- `npm run type-check` - Run TypeScript type checking
 - `npm run format` - Format code with Prettier
-- `npm run format:check` - Check code formatting
 
-## 🔧 Development
+## 🔧 Configuration
 
 ### Environment Variables
 
-Create a `.env.local` file in the root directory:
+Create `.env.local`:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3000/api
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-### API Routes
+### Backend API Endpoints Used
 
-The application includes mock API routes for development:
+- `POST /auth/register` - Register farmer
+- `POST /auth/login` - Login farmer
+- `GET /farm/cow?farmer_id={id}` - Get cattle list
+- `POST /farm/cow` - Create cattle
+- `PUT /farm/cow/{cow_id}` - Update cattle
+- `DELETE /farm/cow/{cow_id}` - Delete cattle
+- `GET /farm/sensor-data` - Get sensor readings
 
-- `POST /api/auth/login` - User authentication
-- `POST /api/auth/register` - User registration
-- `GET /api/cattle` - Get cattle list
-- `POST /api/cattle` - Create new cattle record
-- `GET /api/monitoring/status` - Get cattle status
-- `GET /api/monitoring/alerts` - Get alerts
-- `GET /api/monitoring/sensor-data` - Get sensor readings
+## 🎨 Key Components
 
-### Default Login Credentials
+- **Dashboard**: Main container managing cattle and monitoring sections
+- **CattleRegistrationModal**: Form for adding new cattle
+- **CattleEditModal**: Form for editing cattle details
+- **ChooseCowSection**: Display and manage cattle list
+- **RecordDataSection**: View sensor data with time-range filtering
+- **LoginPage/RegistrationPage**: Authentication pages
+- **Toast**: Notification system for user feedback
 
-For testing purposes, use:
-- **Email**: `admin@cattle-monitor.com`
-- **Password**: `password`
+## � Data Flow
 
-## 🎨 UI Components
+```
+Frontend (Next.js)
+  ↓
+API Client (lib/api.ts)
+  ↓
+Backend API (FastAPI)
+  ↓
+PostgreSQL + MongoDB
+```
 
-The project uses a custom component library built on top of Radix UI:
+## 🔒 Authentication
 
-- Button
-- Input
-- Label
-- Card
-- Toast notifications
+- HTTP-only cookie-based sessions
+- Protected routes with useAuth hook
+- Automatic session management
+- Logout functionality
 
-All components are fully typed and support dark mode.
+## � Responsive Design
 
-## 📱 Responsive Design
-
-The application is fully responsive and optimized for:
+Optimized for:
 - Desktop (1024px+)
 - Tablet (768px - 1023px)
 - Mobile (320px - 767px)
 
-## 🔒 Authentication
-
-The app uses a context-based authentication system with:
-- JWT token storage in localStorage
-- Protected routes
-- Automatic session management
-- Logout functionality
-
 ## 🚨 Error Handling
 
-- Comprehensive error boundaries
-- User-friendly error messages
-- Network error handling
-- Form validation
-
-## 🧪 Testing
-
-To add testing to this project, you can install:
-
-```bash
-npm install --save-dev @testing-library/react @testing-library/jest-dom jest jest-environment-jsdom
-```
-
-## 📦 Production Build
-
-To create a production build:
-
-```bash
-npm run build
-npm run start
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
+- User-friendly error messages with Toast notifications
+- Network error handling with retry logic
+- Form validation feedback
 
 ## 📄 License
 
-This project is licensed under the MIT License.
-
-## 🆘 Support
-
-For support, please contact the development team or create an issue in the repository.
+MIT License
