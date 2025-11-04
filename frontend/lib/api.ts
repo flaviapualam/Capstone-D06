@@ -1,215 +1,315 @@
-import { ApiResponse, User, LoginCredentials, RegisterData, Cattle, CattleRegistrationData, SensorReading, Alert, CattleStatus } from '@/types';
-import { mockLogin, mockRegister, mockCattle, mockSensorReadings, mockAlerts, mockCattleStatus, cattleFeedData } from './mock-data';
+import { ApiResponse, User, LoginCredentials, RegisterData, Cattle, CattleRegistrationData, SensorReading, Sensor } from '@/types';
 
 // Base API configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Mock API delay
-const mockApiCall = async <T>(fn: () => T): Promise<ApiResponse<T>> => {
-  await new Promise(resolve => setTimeout(resolve, 500));
+console.log('🔧 API Base URL:', API_BASE_URL);
+
+// Helper function for API calls with credentials
+async function apiCall<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  console.log('📡 API Call:', options.method || 'GET', url);
+
   try {
-    const result = fn();
+    const response = await fetch(url, {
+      ...options,
+      credentials: 'include', // Include cookies for authentication
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    console.log('📥 Response status:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+      console.error('❌ API Error:', errorMessage, errorData);
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    console.log('✅ API Success:', data);
     return {
       success: true,
-      data: result,
+      data,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+    console.error('❌ Fetch Error:', errorMessage, error);
+
+    // Check if it's a network error
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      return {
+        success: false,
+        error: 'Cannot connect to backend server. Make sure it\'s running on ' + API_BASE_URL,
+      };
+    }
+
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'An error occurred',
+      error: errorMessage,
     };
   }
-};
+}
 
 // Authentication API
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<ApiResponse<{ user: User; token: string }>> => {
-    try {
-      const result = await mockLogin(credentials.email, credentials.password);
+    const response = await apiCall<any>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+
+    if (response.success && response.data) {
+      // Backend returns farmer data, transform to User format
+      const user: User = {
+        farmerId: response.data.farmer_id,
+        name: response.data.name,
+        email: response.data.email,
+        role: 'farmer',
+      };
       return {
         success: true,
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Login failed',
+        data: {
+          user,
+          token: 'cookie-based', // Backend uses HTTP-only cookies
+        },
       };
     }
+
+    return response as ApiResponse<{ user: User; token: string }>;
   },
 
   register: async (userData: RegisterData): Promise<ApiResponse<{ user: User; token: string }>> => {
-    try {
-      const result = await mockRegister(userData);
+    const response = await apiCall<any>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: userData.name,
+        email: userData.email,
+        password: userData.password,
+      }),
+    });
+
+    if (response.success && response.data) {
+      // Backend returns {message, data: {farmer_id, name, email}}
+      const farmerData = response.data.data || response.data;
+      const user: User = {
+        farmerId: farmerData.farmer_id,
+        name: farmerData.name,
+        email: farmerData.email,
+        role: 'farmer',
+      };
       return {
         success: true,
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Registration failed',
+        data: {
+          user,
+          token: 'cookie-based',
+        },
       };
     }
+
+    return response as ApiResponse<{ user: User; token: string }>;
   },
 
   forgotPassword: async (email: string): Promise<ApiResponse<{ message: string }>> => {
-    return mockApiCall(() => ({
-      message: 'Password reset email sent successfully',
-    }));
+    // Not implemented in backend yet
+    return {
+      success: false,
+      error: 'Forgot password feature not yet implemented',
+    };
   },
 
   logout: async (): Promise<ApiResponse<{ message: string }>> => {
-    return mockApiCall(() => ({
-      message: 'Logged out successfully',
-    }));
+    // Clear frontend state (backend doesn't have logout endpoint yet)
+    return {
+      success: true,
+      data: { message: 'Logged out successfully' },
+    };
   },
 };
 
-// Cattle API (using cowId from ERD)
+// Cattle API (maps to /farm/cow endpoints)
 export const cattleApi = {
-  getAll: async (): Promise<ApiResponse<Cattle[]>> => {
-    return mockApiCall(() => mockCattle);
+  getAll: async (farmerId: string): Promise<ApiResponse<Cattle[]>> => {
+    const response = await apiCall<any[]>(`/farm/cow?farmer_id=${farmerId}`, {
+      method: 'GET',
+    });
+
+    if (response.success && response.data) {
+      // Transform backend response to frontend Cattle type
+      const cattle: Cattle[] = response.data.map((cow: any) => ({
+        cowId: cow.cow_id || '',
+        farmerId: cow.farmer_id || '',
+        name: cow.name || '',
+        age: cow.age || 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+
+      return {
+        success: true,
+        data: cattle,
+      };
+    }
+
+    return response as ApiResponse<Cattle[]>;
   },
 
   getByCowId: async (cowId: string): Promise<ApiResponse<Cattle>> => {
-    return mockApiCall(() => {
-      const cattle = mockCattle.find(c => c.cowId === cowId);
-      if (!cattle) throw new Error('Cattle not found');
-      return cattle;
-    });
+    // Backend doesn't have single cow endpoint, use getAll and filter
+    return {
+      success: false,
+      error: 'Get single cow not implemented - use getAll instead',
+    };
   },
 
   getByFarmerId: async (farmerId: string): Promise<ApiResponse<Cattle[]>> => {
-    return mockApiCall(() => {
-      return mockCattle.filter(c => c.farmerId === farmerId);
-    });
+    return cattleApi.getAll(farmerId);
   },
 
-  create: async (cattleData: CattleRegistrationData): Promise<ApiResponse<Cattle>> => {
-    return mockApiCall(() => {
-      const newCattle: Cattle = {
-        cowId: `COW-${String(mockCattle.length + 1).padStart(3, '0')}`,
-        farmerId: 'FARMER-001', // Default to first farmer
+  create: async (cattleData: CattleRegistrationData, farmerId: string): Promise<ApiResponse<Cattle>> => {
+    const response = await apiCall<any>('/farm/cow', {
+      method: 'POST',
+      body: JSON.stringify({
+        farmer_id: farmerId,
         name: cattleData.name,
-        breed: cattleData.breed,
         age: cattleData.age,
-        weight: cattleData.weight,
-        status: cattleData.status,
-        notes: cattleData.notes,
+      }),
+    });
+
+    if (response.success && response.data) {
+      const cattle: Cattle = {
+        cowId: response.data.cow_id || '',
+        farmerId: response.data.farmer_id || '',
+        name: response.data.name || '',
+        age: response.data.age || 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      mockCattle.push(newCattle);
-      return newCattle;
-    });
+
+      return {
+        success: true,
+        data: cattle,
+      };
+    }
+
+    return response as ApiResponse<Cattle>;
   },
 
   update: async (cowId: string, cattleData: Partial<CattleRegistrationData>): Promise<ApiResponse<Cattle>> => {
-    return mockApiCall(() => {
-      const index = mockCattle.findIndex(c => c.cowId === cowId);
-      if (index === -1) throw new Error('Cattle not found');
-      
-      mockCattle[index] = {
-        ...mockCattle[index],
-        ...cattleData,
+    const updatePayload: any = {};
+    if (cattleData.name) updatePayload.name = cattleData.name;
+    if (cattleData.age) updatePayload.age = cattleData.age;
+
+    const response = await apiCall<any>(`/farm/cow/${cowId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updatePayload),
+    });
+
+    if (response.success && response.data) {
+      const cattle: Cattle = {
+        cowId: response.data.cow_id || '',
+        farmerId: response.data.farmer_id || '',
+        name: response.data.name || '',
+        age: response.data.age || 0,
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      return mockCattle[index];
-    });
+
+      return {
+        success: true,
+        data: cattle,
+      };
+    }
+
+    return response as ApiResponse<Cattle>;
   },
 
   delete: async (cowId: string): Promise<ApiResponse<{ message: string }>> => {
-    return mockApiCall(() => {
-      const index = mockCattle.findIndex(c => c.cowId === cowId);
-      if (index === -1) throw new Error('Cattle not found');
-      
-      mockCattle.splice(index, 1);
-      return { message: 'Cattle deleted successfully' };
+    return apiCall<{ message: string }>(`/farm/cow/${cowId}`, {
+      method: 'DELETE',
     });
   },
 };
 
-// Monitoring API (updated for ERD structure)
-export const monitoringApi = {
-  getStatus: async (): Promise<ApiResponse<CattleStatus[]>> => {
-    return mockApiCall(() => mockCattleStatus);
-  },
-
-  getSensorData: async (cowId?: string): Promise<ApiResponse<SensorReading[]>> => {
-    return mockApiCall(() => {
-      if (cowId) {
-        return mockSensorReadings.filter(reading => reading.cowId === cowId);
-      }
-      return mockSensorReadings;
+// Sensor API (maps to /farm/sensor endpoints)
+export const sensorApi = {
+  getAll: async (): Promise<ApiResponse<Sensor[]>> => {
+    const response = await apiCall<any[]>('/farm/sensor', {
+      method: 'GET',
     });
-  },
 
-  getSensorDataByTimeRange: async (
-    cowId: string, 
-    startTime: string, 
-    endTime: string
-  ): Promise<ApiResponse<SensorReading[]>> => {
-    return mockApiCall(() => {
-      return mockSensorReadings.filter(reading => 
-        reading.cowId === cowId &&
-        reading.timeGenerated >= startTime &&
-        reading.timeGenerated <= endTime
-      );
-    });
-  },
+    if (response.success && response.data) {
+      const sensors: Sensor[] = response.data.map((sensor: any) => ({
+        sensorId: sensor.sensor_id,
+        status: sensor.status === 1 ? 'active' : 'inactive',
+      }));
 
-  getAlerts: async (): Promise<ApiResponse<Alert[]>> => {
-    return mockApiCall(() => mockAlerts);
-  },
-
-  getAlertsByCowId: async (cowId: string): Promise<ApiResponse<Alert[]>> => {
-    return mockApiCall(() => {
-      return mockAlerts.filter(alert => alert.cowId === cowId);
-    });
-  },
-
-  resolveAlert: async (alertId: string): Promise<ApiResponse<Alert>> => {
-    return mockApiCall(() => {
-      const alert = mockAlerts.find(a => a.id === alertId);
-      if (!alert) throw new Error('Alert not found');
-      
-      alert.isResolved = true;
-      alert.resolvedAt = new Date().toISOString();
-      return alert;
-    });
-  },
-
-  getFeedData: async (cowId?: string): Promise<ApiResponse<any>> => {
-    return mockApiCall(() => {
-      if (cowId && cattleFeedData[cowId as keyof typeof cattleFeedData]) {
-        return cattleFeedData[cowId as keyof typeof cattleFeedData];
-      }
-      return cattleFeedData;
-    });
-  },
-
-  getAnomalyScore: async (cowId: string): Promise<ApiResponse<{ score: number; status: string }>> => {
-    return mockApiCall(() => {
-      const cattleReadings = mockSensorReadings.filter(r => r.cowId === cowId);
-      const avgScore = cattleReadings.reduce((sum, r) => sum + r.anomalyScore, 0) / cattleReadings.length || 0;
-      
-      let status = 'normal';
-      if (avgScore > 0.7) status = 'high';
-      else if (avgScore > 0.3) status = 'medium';
-      
-      return { 
-        score: Math.round(avgScore * 100) / 100,
-        status 
+      return {
+        success: true,
+        data: sensors,
       };
-    });
+    }
+
+    return response as ApiResponse<Sensor[]>;
   },
+};
+
+// Monitoring API (simplified to match backend capabilities)
+export const monitoringApi = {
+  getSensorData: async (cowId?: number, limit: number = 100): Promise<ApiResponse<SensorReading[]>> => {
+    const queryParams = new URLSearchParams();
+    if (cowId !== undefined) queryParams.append('cow_id', cowId.toString());
+    queryParams.append('limit', limit.toString());
+
+    const response = await apiCall<{ data: any[]; count: number }>(
+      `/farm/sensor-data?${queryParams.toString()}`,
+      { method: 'GET' }
+    );
+
+    if (response.success && response.data) {
+      // Transform MongoDB sensor data to frontend SensorReading type
+      const sensorReadings: SensorReading[] = response.data.data.map((reading: any) => ({
+        timeGenerated: reading.timestamp || reading.timeGenerated || new Date().toISOString(),
+        cowId: reading.cow_id?.toString() || reading.cowId || '',
+        eatDuration: reading.eat_duration || reading.eatDuration || 0,
+        eatSpeed: reading.eat_speed || reading.eatSpeed || 0,
+        anomalyScore: reading.anomaly_score || reading.anomalyScore || 0,
+        temperature: reading.temperature || 0,
+        heartRate: reading.heart_rate || reading.heartRate || 0,
+        activityLevel: reading.activity_level || reading.activityLevel || 0,
+        location: reading.location || '',
+      }));
+
+      return {
+        success: true,
+        data: sensorReadings,
+      };
+    }
+
+    return {
+      success: false,
+      error: response.error || 'Failed to fetch sensor data',
+    };
+  },
+
+  // Removed unsupported features:
+  // - getStatus (no backend endpoint)
+  // - getAlerts (no backend endpoint)
+  // - getFeedData (no backend endpoint)
+  // - getAnomalyScore (can be calculated from sensor data on frontend)
 };
 
 // Export a combined API object for backward compatibility
 export const api = {
   auth: authApi,
   cattle: cattleApi,
+  sensor: sensorApi,
   monitoring: monitoringApi,
 };
 

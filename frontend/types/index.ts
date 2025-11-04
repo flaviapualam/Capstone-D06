@@ -4,7 +4,7 @@ export interface User {
   name: string;
   email: string;
   passwordHash?: string;
-  role?: 'admin' | 'user';
+  role?: 'admin' | 'user' | 'farmer';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -30,50 +30,35 @@ export interface AuthResponse {
 
 // Cattle related types (Cow table)
 export interface Cattle {
-  cowId: string;
-  farmerId: string;
+  cowId: string; // UUID from backend (internal identifier)
+  farmerId: string; // UUID
   name: string;
   age: number;
-  status: 'healthy' | 'sick' | 'pregnant' | 'injured';
-  breed?: string;
-  weight?: number;
-  lastCheckup?: string;
-  notes?: string;
   createdAt?: string;
   updatedAt?: string;
-  image?: string;
 }
 
 export interface CattleRegistrationData {
   name: string;
-  breed: string;
   age: number;
-  weight: number;
-  status: Cattle['status'];
-  notes?: string;
 }
 
-// Sensor table
+// Sensor table (matches backend SensorResponse)
 export interface Sensor {
-  sensorId: string;
-  type: 'feed_intake' | 'activity' | 'temperature' | 'heart_rate';
-  status: 'active' | 'inactive' | 'maintenance';
-  installDate: string;
-  lastCalibration?: string;
+  sensorId: string; // UUID from backend
+  status: 'active' | 'inactive'; // Backend uses 1=active, 0=inactive
 }
 
 // Clean Data table
 export interface SensorReading {
   timeGenerated: string;
   cowId: string;
-  sensorId: string;
+  sensorId?: string; // Optional - not always provided by backend
   eatDuration: number;
   eatSpeed: number;
   anomalyScore: number;
   temperature?: number;
-  heartRate?: number;
-  activityLevel?: number;
-  location?: {
+  location?: string | {
     latitude: number;
     longitude: number;
   };
@@ -112,6 +97,7 @@ export interface CattleStatus {
   avgEatSpeed?: number;
   anomalyScore?: number;
   feedingPattern?: string;
+  weightTrend?: 'increasing' | 'stable' | 'decreasing';
 }
 
 // API Response types

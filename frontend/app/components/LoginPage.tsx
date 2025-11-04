@@ -94,7 +94,7 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@farm.com"
+                placeholder="admin@cattle-monitor.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -107,7 +107,7 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="password123"
+                  placeholder="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -157,8 +157,8 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
           </div>
           <div className="mt-4 p-3 bg-gray-50 rounded text-sm text-gray-600">
             <strong>Demo credentials:</strong><br />
-            Email: admin@farm.com<br />
-            Password: password123
+            Email: admin@cattle-monitor.com<br />
+            Password: password
           </div>
         </CardContent>
       </Card>
