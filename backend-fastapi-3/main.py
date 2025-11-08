@@ -48,4 +48,4 @@ async def health_check(
 
     return {"api_status": "ok", "db_status": db_status, "message": db_message}
 
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router, prefix="/api")

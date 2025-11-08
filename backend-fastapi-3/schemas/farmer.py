@@ -16,3 +16,10 @@ class FarmerResponse(FarmerBase):
 
     class Config:
         from_attributes = True # Mengizinkan Pydantic membaca dari objek DB
+
+class FarmerLogin(BaseModel):
+    """
+    Skema yang digunakan HANYA untuk body request login.
+    """
+    email: EmailStr
+    password: str
