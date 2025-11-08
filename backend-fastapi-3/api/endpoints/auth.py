@@ -26,6 +26,9 @@ async def register_farmer(
     farmer_in: FarmerCreate,
     db: asyncpg.Connection = Depends(get_db_connection)
 ):
+    """
+    Register farmer in database.
+    """
     existing_farmer = await authentication.get_farmer_by_email(db, email=farmer_in.email)
     if existing_farmer:
         raise HTTPException(
@@ -37,18 +40,18 @@ async def register_farmer(
 
     return new_farmer
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(
-    # --- 3. Tambahkan 'response: Response' ---
+@router.post("/login", response_model=Token)
+async def login_farmer(
     response: Response, 
     login_request: FarmerLogin = Body(...), 
     db: asyncpg.Connection = Depends(get_db_connection)
 ):
-    
+    """
+    Give access to farmer using app.
+    """
     farmer_record = await authentication.get_farmer_by_email(
         db, email=login_request.email
     )
-
     if not farmer_record or not verify_password(
         login_request.password, farmer_record['password_hash']
     ):
@@ -56,35 +59,29 @@ async def login_for_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email atau password salah",
         )
-        
     token_data = {
         "sub": farmer_record['email'], 
         "farmer_id": str(farmer_record['farmer_id'])
     }
     access_token = create_access_token(data=token_data)
 
-    # --- 4. INI ADALAH LOGIKA BARU ---
-    # Set token di HttpOnly cookie
     response.set_cookie(
         key="access_token", # Nama cookie
-        value=f"Bearer {access_token}", # Nilai (termasuk "Bearer ")
-        httponly=True,      # PENTING: Mencegah JS membacanya
-        secure=True,        # PENTING: Hanya kirim via HTTPS
-        samesite="lax",     # PENTING: Perlindungan CSRF (bisa juga 'strict')
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 # Samakan dgn expire token
+        value=f"Bearer {access_token}", 
+        httponly=True,      
+        secure=True,        
+        samesite="lax",  
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 
     )
     
-    # 5. Kembalikan pesan sukses
     return {"status": "success", "message": "Logged in successfully"}
 
 
-# --- Endpoint Test (Baru) ---
 @router.get("/me", response_model=FarmerResponse)
-async def read_farmers_me(
+async def check_cookies(
     current_farmer: FarmerResponse = Depends(get_current_farmer)
 ):
     """
-    Mengambil data farmer yang sedang login (dari cookie).
-    Digunakan untuk menguji apakah token bekerja.
+    Get data farmer who is log in. Use to check is token works.
     """
     return current_farmer
