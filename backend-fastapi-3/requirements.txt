@@ -1,3 +1,6 @@
 pydantic-settings
 asyncpg
 "fastapi[all]"
+passlib[bcrypt]
+argon2-cffi 
+passlib

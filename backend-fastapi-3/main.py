@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 import asyncpg
 from db.postgresql import connect_to_db, close_db_connection, get_db_connection
 
+from api.api_router import api_router
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_db()
@@ -45,3 +47,5 @@ async def health_check(
         )
 
     return {"api_status": "ok", "db_status": db_status, "message": db_message}
+
+app.include_router(api_router, prefix="/api/v1")
