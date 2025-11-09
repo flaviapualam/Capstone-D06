@@ -89,7 +89,6 @@ async def delete_existing_cow(
     "/{cow_id}/pregnancies", 
     response_model=CowPregnancyResponse, 
     status_code=status.HTTP_201_CREATED,
-    tags=["Cow Pregnancy"] # Tag terpisah di Swagger UI
 )
 async def add_pregnancy_record(
     preg_in: CowPregnancyCreate,
@@ -105,7 +104,6 @@ async def add_pregnancy_record(
 @router.patch(
     "/{cow_id}/pregnancies/{pregnancy_id}", 
     response_model=CowPregnancyResponse,
-    tags=["Cow Pregnancy"]
 )
 async def update_pregnancy_record(
     pregnancy_id: int,
@@ -127,7 +125,6 @@ async def update_pregnancy_record(
 @router.delete(
     "/{cow_id}/pregnancies/{pregnancy_id}", 
     response_model=CowPregnancyResponse,
-    # tags=["Cow Pregnancy"]
 )
 async def delete_pregnancy_record(
     pregnancy_id: int,
