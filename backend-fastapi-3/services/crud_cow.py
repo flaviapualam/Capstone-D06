@@ -2,6 +2,7 @@
 import asyncpg
 from uuid import UUID
 from schemas.cow import CowCreate, CowUpdate
+import json
 
 async def create_cow(
     db: asyncpg.Connection, 
@@ -28,24 +29,68 @@ async def create_cow(
 async def get_cows_by_farmer(
     db: asyncpg.Connection, 
     farmer_id: UUID
-) -> list[asyncpg.Record]:
+) -> list:
     """
-    Get all cows from a farmer
+    Mengambil semua sapi milik farmer,
+    dengan data kehamilan digabung sebagai array JSON.
     """
-    query = "SELECT * FROM cow WHERE farmer_id = $1 ORDER BY name"
+    query = """
+    SELECT 
+        c.*, 
+        COALESCE(
+            json_agg(cp.*) FILTER (WHERE cp.pregnancy_id IS NOT NULL), 
+            '[]'::json
+        ) as pregnancies
+    FROM cow c
+    LEFT JOIN cow_pregnancy cp ON c.cow_id = cp.cow_id
+    WHERE c.farmer_id = $1
+    GROUP BY c.cow_id
+    ORDER BY c.name;
+    """
     cows = await db.fetch(query, farmer_id)
-    return [dict(cow) for cow in cows]
+    
+    # --- 2. Lakukan perulangan dan parsing ---
+    results = []
+    for cow_record in cows:
+        cow_dict = dict(cow_record)
+        # 'pregnancies' saat ini adalah string (misal: '[{...}]' atau '[]')
+        # Kita ubah menjadi list Python
+        cow_dict['pregnancies'] = json.loads(cow_dict['pregnancies'])
+        results.append(cow_dict)
+        
+    return results
 
 async def get_cow_by_id(
     db: asyncpg.Connection, 
     cow_id: UUID
-) -> asyncpg.Record | None:
+) -> dict | None:
     """
-    Get a cow by cow id.
+    Mengambil satu sapi,
+    dengan data kehamilan digabung sebagai array JSON.
     """
-    query = "SELECT * FROM cow WHERE cow_id = $1"
+    query = """
+    SELECT 
+        c.*, 
+        COALESCE(
+            json_agg(cp.*) FILTER (WHERE cp.pregnancy_id IS NOT NULL), 
+            '[]'::json
+        ) as pregnancies
+    FROM cow c
+    LEFT JOIN cow_pregnancy cp ON c.cow_id = cp.cow_id
+    WHERE c.cow_id = $1
+    GROUP BY c.cow_id;
+    """
     cow = await db.fetchrow(query, cow_id)
-    return dict(cow)
+    
+    if not cow:
+        return None
+        
+    # --- 3. Ubah record dan parsing ---
+    cow_dict = dict(cow)
+    # 'pregnancies' saat ini adalah string, ubah menjadi list
+    cow_dict['pregnancies'] = json.loads(cow_dict['pregnancies'])
+    
+    return cow_dict
 
 async def update_cow(
     db: asyncpg.Connection, 
@@ -83,4 +128,4 @@ async def delete_cow(
     """
     query = "DELETE FROM cow WHERE cow_id = $1 RETURNING *"
     deleted_cow = await db.fetchrow(query, cow_id)
-    return deleted_cow
+    return dict(deleted_cow)

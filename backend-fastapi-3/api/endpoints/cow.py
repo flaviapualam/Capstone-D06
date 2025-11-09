@@ -5,16 +5,39 @@ from typing import List
 
 from schemas.cow import CowCreate, CowUpdate, CowResponse
 from schemas.farmer import FarmerResponse
-from services import crud_cow
+# --- IMPOR BARU ---
+from schemas.cow_pregnancy import (
+    CowPregnancyCreate, 
+    CowPregnancyUpdate, 
+    CowPregnancyResponse
+)
+from services import crud_cow, crud_cow_pregnancy 
 from db.postgresql import get_db_connection
 from core.security import get_current_farmer
 import asyncpg
 
 router = APIRouter(
-    prefix="/cow",
+    prefix="/cow", # Prefix Anda "/cow", bukan "/cows"
     tags=["Cows"],
-    dependencies=[Depends(get_current_farmer)] # Amankan SEMUA rute di file ini dengan 'get_current_farmer'
+    dependencies=[Depends(get_current_farmer)]
 )
+
+async def get_cow_and_verify_ownership(
+    cow_id: UUID,
+    db: asyncpg.Connection = Depends(get_db_connection),
+    current_farmer: FarmerResponse = Depends(get_current_farmer)
+) -> dict:
+    """
+    Dependency yang mengambil data sapi dan memverifikasi farmer
+    yang login adalah pemiliknya.
+    """
+    cow = await crud_cow.get_cow_by_id(db, cow_id=cow_id) 
+    
+    if not cow:
+        raise HTTPException(status_code=404, detail="Sapi tidak ditemukan")
+    if cow['farmer_id'] != current_farmer.farmer_id:
+        raise HTTPException(status_code=403, detail="Anda tidak punya hak akses ke sapi ini")
+    return cow
 
 @router.post("/", response_model=CowResponse, status_code=status.HTTP_201_CREATED)
 async def create_new_cow(
@@ -22,96 +45,99 @@ async def create_new_cow(
     db: asyncpg.Connection = Depends(get_db_connection),
     current_farmer: FarmerResponse = Depends(get_current_farmer)
 ):
-    """
-    Membuat Sapi baru untuk farmer yang sedang login.
-    """
     new_cow = await crud_cow.create_cow(
         db, cow=cow_in, farmer_id=current_farmer.farmer_id
     )
-    return new_cow
+    cow_data = await crud_cow.get_cow_by_id(db, new_cow['cow_id'])
+    return cow_data
 
-#--------------------
-# READ (Membaca Semua)
-#--------------------
 @router.get("/", response_model=List[CowResponse])
 async def read_my_cows(
     db: asyncpg.Connection = Depends(get_db_connection),
     current_farmer: FarmerResponse = Depends(get_current_farmer)
 ):
-    """
-    Mengambil semua Sapi yang dimiliki oleh farmer yang sedang login.
-    """
     cows = await crud_cow.get_cows_by_farmer(db, farmer_id=current_farmer.farmer_id)
     return cows
 
-#--------------------
-# READ (Membaca Satu)
-#--------------------
 @router.get("/{cow_id}", response_model=CowResponse)
 async def read_cow(
-    cow_id: UUID,
-    db: asyncpg.Connection = Depends(get_db_connection),
-    current_farmer: FarmerResponse = Depends(get_current_farmer)
+    cow: dict = Depends(get_cow_and_verify_ownership)
 ):
-    """
-    Mengambil satu Sapi berdasarkan ID.
-    Hanya mengizinkan jika Sapi itu milik farmer yang login.
-    """
-    cow = await crud_cow.get_cow_by_id(db, cow_id=cow_id)
-    
-    # 404 - Not Found
-    if not cow:
-        raise HTTPException(status_code=404, detail="Sapi tidak ditemukan")
-        
-    # 403 - Forbidden (Otorisasi Gagal)
-    if cow['farmer_id'] != current_farmer.farmer_id:
-        raise HTTPException(status_code=403, detail="Anda tidak punya hak akses ke sapi ini")
-        
     return cow
 
-#--------------------
-# UPDATE (Memperbarui)
-#--------------------
 @router.patch("/{cow_id}", response_model=CowResponse)
 async def update_existing_cow(
-    cow_id: UUID,
+    cow_id: UUID, # Kita butuh ID untuk 'update_cow'
     cow_in: CowUpdate,
-    db: asyncpg.Connection = Depends(get_db_connection),
-    current_farmer: FarmerResponse = Depends(get_current_farmer)
+    cow: dict = Depends(get_cow_and_verify_ownership), # Verifikasi
+    db: asyncpg.Connection = Depends(get_db_connection)
 ):
-    """
-    Memperbarui Sapi. Hanya mengizinkan jika Sapi itu milik farmer yang login.
-    """
-    # Pertama, cek kepemilikan (sama seperti read_cow)
-    cow = await crud_cow.get_cow_by_id(db, cow_id=cow_id)
-    if not cow:
-        raise HTTPException(status_code=404, detail="Sapi tidak ditemukan")
-    if cow['farmer_id'] != current_farmer.farmer_id:
-        raise HTTPException(status_code=403, detail="Anda tidak punya hak akses ke sapi ini")
-        
-    # Jika lolos cek, baru lakukan update
-    updated_cow = await crud_cow.update_cow(db, cow_id=cow_id, cow=cow_in)
-    return updated_cow
+    await crud_cow.update_cow(db, cow_id=cow_id, cow=cow_in)
+    updated_cow_data = await crud_cow.get_cow_by_id(db, cow_id=cow_id)
+    return updated_cow_data
 
-#--------------------
-# DELETE (Menghapus)
-#--------------------
 @router.delete("/{cow_id}", response_model=CowResponse)
 async def delete_existing_cow(
     cow_id: UUID,
-    db: asyncpg.Connection = Depends(get_db_connection),
-    current_farmer: FarmerResponse = Depends(get_current_farmer)
+    cow: dict = Depends(get_cow_and_verify_ownership), # Verifikasi
+    db: asyncpg.Connection = Depends(get_db_connection)
 ):
-    """
-    Menghapus Sapi. Hanya mengizinkan jika Sapi itu milik farmer yang login.
-    """
-    # Cek kepemilikan (sama seperti read_cow)
-    cow = await crud_cow.get_cow_by_id(db, cow_id=cow_id)
-    if not cow:
-        raise HTTPException(status_code=404, detail="Sapi tidak ditemukan")
-    if cow['farmer_id'] != current_farmer.farmer_id:
-        raise HTTPException(status_code=403, detail="Anda tidak punya hak akses ke sapi ini")
-
-    # Jika lolos cek, baru lakukan delete
     deleted_cow = await crud_cow.delete_cow(db, cow_id=cow_id)
     return deleted_cow
+
+@router.post(
+    "/{cow_id}/pregnancies", 
+    response_model=CowPregnancyResponse, 
+    status_code=status.HTTP_201_CREATED,
+    tags=["Cow Pregnancy"] # Tag terpisah di Swagger UI
+)
+async def add_pregnancy_record(
+    preg_in: CowPregnancyCreate,
+    cow: dict = Depends(get_cow_and_verify_ownership), # Verifikasi kepemilikan sapi
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """Mencatat kehamilan baru untuk sapi yang spesifik."""
+    new_record = await crud_cow_pregnancy.create_pregnancy(
+        db, cow_id=cow['cow_id'], preg_in=preg_in
+    )
+    return new_record
+
+@router.patch(
+    "/{cow_id}/pregnancies/{pregnancy_id}", 
+    response_model=CowPregnancyResponse,
+    tags=["Cow Pregnancy"]
+)
+async def update_pregnancy_record(
+    pregnancy_id: int,
+    preg_in: CowPregnancyUpdate,
+    cow: dict = Depends(get_cow_and_verify_ownership), # Verifikasi kepemilikan sapi
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """Memperbarui satu rekaman kehamilan (misal: mencatat time_end)."""
+    updated_record = await crud_cow_pregnancy.update_pregnancy(
+        db, 
+        cow_id=cow['cow_id'], 
+        pregnancy_id=pregnancy_id, 
+        preg_in=preg_in
+    )
+    if not updated_record:
+        raise HTTPException(status_code=404, detail="Rekaman kehamilan tidak ditemukan")
+    return updated_record
+
+@router.delete(
+    "/{cow_id}/pregnancies/{pregnancy_id}", 
+    response_model=CowPregnancyResponse,
+    # tags=["Cow Pregnancy"]
+)
+async def delete_pregnancy_record(
+    pregnancy_id: int,
+    cow: dict = Depends(get_cow_and_verify_ownership), # Verifikasi kepemilikan sapi
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """Menghapus satu rekaman kehamilan (misal: salah input)."""
+    deleted_record = await crud_cow_pregnancy.delete_pregnancy(
+        db, cow_id=cow['cow_id'], pregnancy_id=pregnancy_id
+    )
+    if not deleted_record:
+        raise HTTPException(status_code=404, detail="Rekaman kehamilan tidak ditemukan")
+    return deleted_record
