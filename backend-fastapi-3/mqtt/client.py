@@ -9,6 +9,7 @@ from typing import List, Tuple, Dict, Any
 from core.config import settings
 from services.crud_sensor import batch_insert_sensor_data 
 from services.crud_device import upsert_device_status
+from services.crud_rfid import upsert_rfid_tags # <-- Impor baru
 
 MQTT_DATA_BUFFER: List[Dict[str, Any]] = []
 BUFFER_SIZE = 100 
@@ -24,8 +25,10 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
     
     device_updates: Dict[str, Tuple(str, datetime)] = {}
     output_sensor_batch: List[Tuple] = []
+    rfid_ids_to_register: set = set() # <-- Set baru untuk menampung rfid
 
     for msg in current_batch_dicts:
+        # 1. Siapkan data untuk output_sensor
         output_sensor_batch.append(
             (
                 msg['timestamp'],
@@ -36,18 +39,35 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
                 msg['ip']
             )
         )
+        
+        # 2. Siapkan data untuk update device
         device_updates[msg['device_id']] = (msg['ip'], msg['timestamp'])
 
+        # 3. Siapkan data untuk registrasi RFID
+        rfid = msg.get('rfid_id')
+        if rfid: # Pastikan rfid tidak None
+            rfid_ids_to_register.add(rfid)
+
+    # Konversi set/dict ke list of tuples untuk 'executemany'
     device_upsert_batch = [
         (device_id, data[0], data[1]) 
         for device_id, data in device_updates.items()
     ]
+    rfid_upsert_batch = [(rfid,) for rfid in rfid_ids_to_register] # <-- List baru
     
     try:
         async with pool.acquire() as connection:
+            # --- URUTAN EKSEKUSI SANGAT PENTING ---
+
+            # 1. Daftarkan/Update Device (Memenuhi FK pertama)
             if device_upsert_batch:
                 await upsert_device_status(connection, device_upsert_batch)
 
+            # 2. Daftarkan RFID (Memenuhi FK kedua)
+            if rfid_upsert_batch:
+                await upsert_rfid_tags(connection, rfid_upsert_batch)
+
+            # 3. Masukkan Data Sensor (Semua FK sekarang valid)
             if output_sensor_batch:
                 await batch_insert_sensor_data(connection, output_sensor_batch)
                 
