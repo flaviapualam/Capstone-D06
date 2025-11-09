@@ -4,6 +4,8 @@ from uuid import UUID
 from datetime import date
 from typing import Literal
 
+from schemas.cow_pregnancy import CowPregnancyResponse
+
 class CowBase(BaseModel):
     name: str | None = None
     date_of_birth: date | None = None
@@ -20,6 +22,8 @@ class CowUpdate(BaseModel):
 class CowResponse(CowBase):
     cow_id: UUID
     farmer_id: UUID
+    pregnancies: list[CowPregnancyResponse] = []
 
     class Config:
         from_attributes = True
+

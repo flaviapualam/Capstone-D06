@@ -3,13 +3,25 @@ from fastapi import FastAPI, Depends, HTTPException
 from contextlib import asynccontextmanager
 import asyncpg
 from db.postgresql import connect_to_db, close_db_connection, get_db_connection
+import asyncio
 
 from api.api_router import api_router
+from mqtt.client import mqtt_listener_task
+
+mqtt_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await connect_to_db()
+    global mqtt_task
+    pool = await connect_to_db()
+    mqtt_task = asyncio.create_task(mqtt_listener_task(pool))
     yield
+    if mqtt_task:
+        mqtt_task.cancel()
+        try:
+            await mqtt_task
+        except asyncio.CancelledError:
+            print("MQTT task successfully cancelled.")
     await close_db_connection()
 
 app = FastAPI(

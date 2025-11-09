@@ -1,5 +1,7 @@
 pydantic-settings
 asyncpg
-"fastapi[all]"
+fastapi[all]
 argon2-cffi 
 passlib
+python-jose
+aiomqtt
