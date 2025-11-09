@@ -4,3 +4,4 @@ fastapi[all]
 argon2-cffi 
 passlib
 python-jose
+aiomqtt

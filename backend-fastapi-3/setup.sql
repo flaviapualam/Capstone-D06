@@ -120,16 +120,12 @@ CREATE TABLE output_sensor (
     device_id VARCHAR(50) REFERENCES device(device_id),
     rfid_id VARCHAR(50) REFERENCES rfid_tag(rfid_id),
     weight DOUBLE PRECISION,
-    temperature_c DOUBLE PRECISION
-    -- Tidak ada Primary Key untuk performa ingest (penulisan) maksimal
+    temperature_c DOUBLE PRECISION,
+    ip INET
 );
 
--- Perintah TimescaleDB untuk mengubahnya menjadi Hypertable
--- Partisi berdasarkan waktu (wajib) dan device_id (opsional)
--- Menggunakan 2 'space partitions' untuk device_id
 
 SELECT create_hypertable('output_sensor', 'timestamp', 'device_id', 2);
 
--- Index (non-unique) untuk mempercepat kueri dashboard pada data mentah
 CREATE INDEX idx_output_device_time ON output_sensor (device_id, "timestamp" DESC);
 CREATE INDEX idx_output_rfid_time ON output_sensor (rfid_id, "timestamp" DESC);
