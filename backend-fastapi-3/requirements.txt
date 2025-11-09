@@ -1,0 +1,5 @@
+pydantic-settings
+asyncpg
+"fastapi[all]"
+argon2-cffi 
+passlib
