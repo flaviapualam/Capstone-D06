@@ -20,16 +20,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is stored in localStorage
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
+    // Try to get current user from backend (cookie-based auth)
+    (async () => {
       try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        localStorage.removeItem('user');
+        const resp = await authApi.me();
+        if (resp.success && resp.data) {
+          setUser(resp.data.user);
+          localStorage.setItem('user', JSON.stringify(resp.data.user));
+        } else {
+          // fallback to localStorage if present
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            try {
+              setUser(JSON.parse(storedUser));
+            } catch (e) {
+              localStorage.removeItem('user');
+            }
+          }
+        }
+      } catch (e) {
+        // ignore - leave user as null
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    })();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -37,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (response.success && response.data) {
       setUser(response.data.user);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      localStorage.setItem('token', response.data.token);
+      // token is cookie-based and not stored on client
     } else {
       throw new Error(response.error || 'Login failed');
     }
@@ -48,7 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (response.success && response.data) {
       setUser(response.data.user);
       localStorage.setItem('user', JSON.stringify(response.data.user));
-      localStorage.setItem('token', response.data.token);
     } else {
       throw new Error(response.error || 'Registration failed');
     }
