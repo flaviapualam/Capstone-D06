@@ -1,5 +1,6 @@
 # main.py
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncpg
 from db.postgresql import connect_to_db, close_db_connection, get_db_connection
@@ -27,6 +28,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Backend Capstone D06 v3",
     lifespan=lifespan
+)
+
+# CORS Middleware Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://192.168.1.10:3000",  # Network access
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, OPTIONS, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 @app.get("/")

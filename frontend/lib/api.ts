@@ -159,18 +159,15 @@ export const cattleApi = {
   },
 
   create: async (cattleData: CattleRegistrationData): Promise<ApiResponse<Cattle>> => {
-    // Map frontend 'age' to approximate date_of_birth (optional)
-    let date_of_birth: string | undefined = undefined;
-    if ((cattleData as any).age) {
-      const years = (cattleData as any).age;
-      const approx = new Date();
-      approx.setFullYear(approx.getFullYear() - years);
-      date_of_birth = approx.toISOString().split('T')[0];
-    }
-
     const payload: any = { name: cattleData.name };
-    if (date_of_birth) payload.date_of_birth = date_of_birth;
-    if ((cattleData as any).gender) payload.gender = (cattleData as any).gender;
+    
+    // Add optional fields if provided
+    if (cattleData.date_of_birth) {
+      payload.date_of_birth = cattleData.date_of_birth;
+    }
+    if (cattleData.gender) {
+      payload.gender = cattleData.gender;
+    }
 
     const response = await apiCall<any>('/api/cow', {
       method: 'POST',
@@ -179,14 +176,29 @@ export const cattleApi = {
 
     if (response.success && response.data) {
       const cow = response.data;
+      
+      // Calculate age from date_of_birth if available
+      let age = 0;
+      if (cow.date_of_birth) {
+        try {
+          const dob = new Date(cow.date_of_birth);
+          const diff = Date.now() - dob.getTime();
+          age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365));
+        } catch {
+          age = 0;
+        }
+      }
+      
       const cattle: Cattle = {
         cowId: cow.cow_id || '',
         farmerId: cow.farmer_id || '',
         name: cow.name || '',
-        age: 0,
+        date_of_birth: cow.date_of_birth || undefined,
+        gender: cow.gender || undefined,
+        age,
         createdAt: cow.created_at || new Date().toISOString(),
         updatedAt: cow.updated_at || new Date().toISOString(),
-      } as Cattle;
+      };
       return { success: true, data: cattle };
     }
 
@@ -195,14 +207,10 @@ export const cattleApi = {
 
   update: async (cowId: string, cattleData: Partial<CattleRegistrationData>): Promise<ApiResponse<Cattle>> => {
     const payload: any = {};
+    
     if (cattleData.name) payload.name = cattleData.name;
-    if ((cattleData as any).age) {
-      const years = (cattleData as any).age;
-      const approx = new Date();
-      approx.setFullYear(approx.getFullYear() - years);
-      payload.date_of_birth = approx.toISOString().split('T')[0];
-    }
-    if ((cattleData as any).gender) payload.gender = (cattleData as any).gender;
+    if (cattleData.date_of_birth) payload.date_of_birth = cattleData.date_of_birth;
+    if (cattleData.gender) payload.gender = cattleData.gender;
 
     const response = await apiCall<any>(`/api/cow/${cowId}`, {
       method: 'PATCH',
@@ -211,14 +219,29 @@ export const cattleApi = {
 
     if (response.success && response.data) {
       const cow = response.data;
+      
+      // Calculate age from date_of_birth if available
+      let age = 0;
+      if (cow.date_of_birth) {
+        try {
+          const dob = new Date(cow.date_of_birth);
+          const diff = Date.now() - dob.getTime();
+          age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365));
+        } catch {
+          age = 0;
+        }
+      }
+      
       const cattle: Cattle = {
         cowId: cow.cow_id || '',
         farmerId: cow.farmer_id || '',
         name: cow.name || '',
-        age: 0,
+        date_of_birth: cow.date_of_birth || undefined,
+        gender: cow.gender || undefined,
+        age,
         createdAt: cow.created_at || new Date().toISOString(),
         updatedAt: cow.updated_at || new Date().toISOString(),
-      } as Cattle;
+      };
       return { success: true, data: cattle };
     }
 

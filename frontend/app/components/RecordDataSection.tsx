@@ -27,10 +27,15 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
   useEffect(() => {
     const fetchSensorData = async () => {
       try {
-        const response = await monitoringApi.getSensorData();
-        if (response.success && response.data) {
-          setSensorData(response.data);
-        }
+        // TODO: Backend sensor-data endpoint not implemented yet
+        // Uncomment when /api/sensor-data or /api/output-sensor is available
+        // const response = await monitoringApi.getSensorData();
+        // if (response.success && response.data) {
+        //   setSensorData(response.data);
+        // }
+        
+        // For now, set empty data to avoid 404 errors
+        setSensorData([]);
       } catch (error) {
         console.error('Error fetching sensor data:', error);
       } finally {
@@ -39,8 +44,9 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
     };
 
     fetchSensorData();
-    const interval = setInterval(fetchSensorData, 30000);
-    return () => clearInterval(interval);
+    // Disable polling until backend endpoint is ready
+    // const interval = setInterval(fetchSensorData, 30000);
+    // return () => clearInterval(interval);
   }, []);
 
   const getFilteredData = (): SensorReading[] => {
