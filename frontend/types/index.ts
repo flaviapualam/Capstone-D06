@@ -33,14 +33,17 @@ export interface Cattle {
   cowId: string; // UUID from backend (internal identifier)
   farmerId: string; // UUID
   name: string;
-  age: number;
+  date_of_birth?: string; // YYYY-MM-DD format from backend
+  gender?: 'MALE' | 'FEMALE'; // Backend uses Literal['MALE', 'FEMALE']
+  age?: number; // Computed field (for display)
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface CattleRegistrationData {
   name: string;
-  age: number;
+  date_of_birth?: string;
+  gender?: 'MALE' | 'FEMALE';
 }
 
 // Sensor table (matches backend SensorResponse)
