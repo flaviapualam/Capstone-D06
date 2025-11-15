@@ -6,22 +6,36 @@ from db.postgresql import connect_to_db, close_db_connection, get_db_connection
 import asyncio
 
 from api.api_router import api_router
-from mqtt.client import mqtt_listener_task
+from mqtt.client import mqtt_listener_task, session_timeout_checker_task
 
 mqtt_task = None
+session_task = None 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global mqtt_task
+    global mqtt_task, session_task 
+    
     pool = await connect_to_db()
+    
     mqtt_task = asyncio.create_task(mqtt_listener_task(pool))
+    session_task = asyncio.create_task(session_timeout_checker_task(pool)) # <-- Jalankan task timeout
+    
     yield
+    
     if mqtt_task:
         mqtt_task.cancel()
         try:
             await mqtt_task
         except asyncio.CancelledError:
-            print("MQTT task successfully cancelled.")
+            print("MQTT listener task successfully cancelled.")
+            
+    if session_task:
+        session_task.cancel()
+        try:
+            await session_task
+        except asyncio.CancelledError:
+            print("Session timeout checker task successfully cancelled.")
+            
     await close_db_connection()
 
 app = FastAPI(
