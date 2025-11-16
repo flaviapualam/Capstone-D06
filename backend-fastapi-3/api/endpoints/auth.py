@@ -1,5 +1,5 @@
 # api/endpoints/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Response, Request
 from schemas.farmer import FarmerCreate, FarmerResponse, FarmerLogin
 from schemas.token import Token
 from services import authentication
@@ -79,9 +79,12 @@ async def login_farmer(
 
 @router.get("/me", response_model=FarmerResponse)
 async def check_cookies(
+    request: Request,
     current_farmer: FarmerResponse = Depends(get_current_farmer)
 ):
     """
     Get data farmer who is log in. Use to check is token works.
     """
+    if request.method == "OPTIONS":
+        return {}
     return current_farmer
