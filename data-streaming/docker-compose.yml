@@ -2,11 +2,10 @@ version: "3.8"
 services:
   simulator:
     build: .
-    container_name: forwardfill-realtime
-    env_file:
-      - ./.env
+    container_name: cattle-realtime-simulator
     volumes:
-      - ./:/app
+      - ./session_metadata:/app/session_metadata
+    network_mode: host
     restart: unless-stopped
 
   # Optional local mosquitto for testing. Uncomment if you want a local broker.
@@ -20,3 +19,4 @@ services:
   #     - ./mosquitto/data:/mosquitto/data
   #     - ./mosquitto/log:/mosquitto/log
   #   restart: unless-stopped
+

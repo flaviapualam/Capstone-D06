@@ -1,45 +1,78 @@
 #!/usr/bin/env python3
 """
-Realtime forward-fill MQTT simulator for feeding sessions (08:00 & 14:00 local)
-- Reads DB to list farmers/cows
-- CLI to activate/deactivate cows and set per-cow profile/duration
-- Publishes per-second during real session windows to MQTT broker
-- Payload matches `backfill_monthly_timescale.py` fields: timestamp, device_id, rfid_id, weight, temperature_c, ip
+Realtime MQTT simulator for cattle feeding sessions
+Continuous feeding simulator that publishes sensor data to MQTT broker.
 
-Usage (dev):
-  python3 main.py --farmer-id <FARMER_ID>
+- Simulates 3 devices with mapped RFID tags
+- Publishes sensor data continuously with 30-min intervals between sessions
+- Payload format: {"ip": "...", "id": "01", "rfid": "...", "w": 85.61, "temp": 84.89, "ts": "..."}
 
-Docker: use docker-compose.yml in same folder (see README)
+Usage:
+  python3 main.py
 """
+
+import time
+import json
+import random
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Optional
+import logging
+
+import paho.mqtt.client as mqtt
+import numpy as np
+
+# Hardcoded configuration
+MQTT_BROKER_HOST = "localhost"
+MQTT_BROKER_PORT = 1883
+MQTT_TOPIC_PREFIX = "cattle/sensor"
+
+# Constants
+DEVICE_IDS = ["1", "2", "3"]
+RFID_MAPPING = {
+    "1": "8H13CJ7",
+    "2": "7F41TR2",
+    "3": "9K22PQ9",
+}
+SHARED_IP = "10.18.236.88"
+SAMPLING_RATE_SECONDS = 1
 
 import os
 import time
 import json
-import threading
 import random
-from datetime import datetime, date, time as dtime, timedelta
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+import logging
 
-import psycopg2
-import yaml
 import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
+import numpy as np
 
-# Load .env from current folder by default. You can instead point docker-compose to backend-fastapi-3/.env
+# Load environment
 load_dotenv()
 
-POSTGRE_URI = os.getenv("POSTGRE_URI")
 MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "localhost")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
 MQTT_TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "cattle/sensor")
+SESSION_LOG_FILE = os.getenv("SESSION_LOG_FILE", "session_metadata.jsonl")
 
-# Constants (kept similar to backfill_monthly_timescale.py)
+# Constants (same as backfill_monthly_timescale.py)
+DEVICE_IDS = ["1", "2", "3"]
+RFID_MAPPING = {
+    "1": "8H13CJ7",
+    "2": "7F41TR2",
+    "3": "9K22PQ9",
+}
 SHARED_IP = os.getenv("SIMULATOR_IP", "192.168.1.100")
-FEEDING_TIMES = ["08:00", "14:00"]  # Daily feeding schedule
-SAMPLE_INTERVAL_SECONDS = 1
-DEFAULT_SESSION_DURATION_MIN = 60
+SAMPLING_RATE_SECONDS = 1
 
-# Weight / temp defaults (can be overridden by profiles)
+# Feeding behavior parameters
+NORMAL_FEEDING_DURATION_MIN = 60
+FEEDING_DURATION_JITTER_MIN = 10
+INTERVAL_BETWEEN_SESSIONS_MIN = 30  # Wait time between sessions
+BUFFER_TIME_SECONDS = 60
+
+# Load cell parameters
 INITIAL_WEIGHT_MIN = 6.5
 INITIAL_WEIGHT_MAX = 7.5
 CONSUMPTION_RATE_MIN = 0.002
@@ -48,322 +81,314 @@ WEIGHT_NOISE_STD = 0.005
 SPIKE_PROBABILITY = 0.005
 SPIKE_MAGNITUDE = 0.3
 
+# Temperature parameters
 TEMP_MIN = 28.0
 TEMP_MAX = 31.0
 TEMP_DRIFT_RATE = 0.02  # °C/min
 TEMP_UPDATE_INTERVAL = 60  # seconds
 
-# Default mapping derived from backfill script
-RFID_TO_DEVICE = {
-    "8H13CJ7": "1",
-    "7F41TR2": "2",
-    "9K22PQ9": "3",
-}
+# Session metadata output (optional logging)
+SESSION_METADATA_DIR = "./session_metadata"
+SESSION_METADATA_FILE = f"{SESSION_METADATA_DIR}/sessions.jsonl"
 
-# Profiles file path
-PROFILES_PATH = os.getenv("SIMULATOR_PROFILES", "session_profiles.yml")
-
-# ----------------------- Helpers -----------------------
-
-def load_profiles(path: str = PROFILES_PATH) -> Dict:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            cfg = yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        cfg = {}
-    cfg.setdefault("profiles", {})
-    cfg.setdefault("overrides", {})
-    return cfg
+# Timezone for timestamps
+TZ_OFFSET = timezone(timedelta(hours=7))  # WIB (GMT+7)
 
 
-def hhmm_to_time(hhmm: str) -> dtime:
-    h, m = map(int, hhmm.split(":"))
-    return dtime(hour=h, minute=m, second=0)
 
+# ============================================================================
+# MQTT CLIENT
+# ============================================================================
 
-def session_bounds_for_date(d: date, hhmm: str, duration_min: int) -> (datetime, datetime):
-    start = datetime.combine(d, hhmm_to_time(hhmm))
-    end = start + timedelta(minutes=duration_min)
-    return start, end
-
-# ----------------------- DB client -----------------------
-class DBClient:
-    def __init__(self, dsn: str):
-        self.dsn = dsn
-
-    def fetch_farmers(self) -> List[Dict]:
-        with psycopg2.connect(self.dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT farmer_id, name FROM farmer ORDER BY name;")
-                return [{"farmer_id": r[0], "name": r[1]} for r in cur.fetchall()]
-
-    def fetch_cows_for_farmer(self, farmer_id: str) -> List[Dict]:
-        q = """
-        SELECT c.cow_id, c.name, ro.rfid_id
-        FROM cow c
-        LEFT JOIN rfid_ownership ro ON ro.cow_id = c.cow_id AND ro.time_end IS NULL
-        WHERE c.farmer_id = %s
-        ORDER BY c.name;
-        """
-        with psycopg2.connect(self.dsn) as conn:
-            with conn.cursor() as cur:
-                cur.execute(q, (farmer_id,))
-                rows = cur.fetchall()
-                return [{"cow_id": str(r[0]), "name": r[1], "rfid": r[2]} for r in rows]
-
-# ----------------------- MQTT writer -----------------------
-class MQTTWriter:
+class MQTTPublisher:
+    """Handle MQTT connection and publishing"""
+    
     def __init__(self, host: str, port: int):
         self.client = mqtt.Client()
         self.host = host
         self.port = port
-        self.client.on_connect = lambda cl, userdata, flags, rc: None
-        # TODO: support username/password or TLS via env if needed (MQTT_USERNAME / MQTT_PASSWORD / MQTT_TLS_CA)
+        self.logger = logging.getLogger(__name__)
+        
+        self.client.on_connect = self._on_connect
         self.client.connect(self.host, self.port, keepalive=60)
         self.client.loop_start()
-
-    def publish(self, topic: str, payload: dict):
-        self.client.publish(topic, json.dumps(payload), qos=1)
-
-# ----------------------- Cow Simulator -----------------------
-class CowSimulator:
-    def __init__(self, cow: Dict, profiles_cfg: Dict = None):
-        self.cow = cow
-        self.active = False
-        self.session_start: Optional[datetime] = None
-        self.session_end: Optional[datetime] = None
-        self.session_duration_min = DEFAULT_SESSION_DURATION_MIN
-        self.profiles_cfg = profiles_cfg or {"profiles": {}, "overrides": {}}
-        self.profile_name = self.profiles_cfg.get("overrides", {}).get(self.cow.get("cow_id"), "normal")
-        self.reset_model_params()
-        # runtime state
-        self.current_weight = None
-        self.current_temp = None
-        self.temp_drift = None
-        self.temp_update_counter = 0
-        self.last_publish_ts: Optional[datetime] = None
-
-    def reset_model_params(self):
-        p = self.profiles_cfg.get("profiles", {}).get(self.profile_name, {})
-        self.session_duration_min = int(p.get("duration_min", DEFAULT_SESSION_DURATION_MIN))
-        self.duration_jitter_min = p.get("duration_jitter_min", 0)
-        self.start_jitter_min = p.get("start_jitter_min", 0)
-        self.consumption_min = p.get("consumption_rate_min", CONSUMPTION_RATE_MIN)
-        self.consumption_max = p.get("consumption_rate_max", CONSUMPTION_RATE_MAX)
-        self.weight_start_min = p.get("weight_start_min", INITIAL_WEIGHT_MIN)
-        self.weight_start_max = p.get("weight_start_max", INITIAL_WEIGHT_MAX)
-        self.spike_probability = p.get("spike_probability", SPIKE_PROBABILITY)
-        self.spike_magnitude = p.get("spike_magnitude", SPIKE_MAGNITUDE)
-        self.no_show_prob = p.get("no_show_prob", 0.0)
-        self.include_gt = p.get("include_gt", False)
-
-    def maybe_start_session(self, now: datetime):
-        # keep session if already inside
-        if self.session_start and self.session_start <= now < self.session_end:
-            return
-        # otherwise check scheduled windows for today
-        for hh in FEEDING_TIMES:
-            start, _ = session_bounds_for_date(now.date(), hh, self.session_duration_min)
-            # apply per-cow start jitter (seconds)
-            jitter = random.randint(-int(self.start_jitter_min * 60), int(self.start_jitter_min * 60))
-            start = start + timedelta(seconds=jitter)
-            # compute end with jitter
-            end = start + timedelta(minutes=self.session_duration_min + random.uniform(-self.duration_jitter_min, self.duration_jitter_min))
-            if start <= now < end:
-                if random.random() < self.no_show_prob:
-                    # no-show: do not set session (no publishes)
-                    self.session_start = None
-                    self.session_end = None
-                    return
-                # start session
-                self.session_start = start
-                self.session_end = end
-                # initialize per-session state
-                self.current_weight = random.uniform(self.weight_start_min, self.weight_start_max)
-                self.consumption_rate = random.uniform(self.consumption_min, self.consumption_max)
-                self.current_temp = random.uniform(TEMP_MIN, TEMP_MAX)
-                self.temp_drift = random.uniform(-TEMP_DRIFT_RATE, TEMP_DRIFT_RATE)
-                self.temp_update_counter = 0
-                self.last_publish_ts = None
-                return
-        # not in session
-        self.session_start = None
-        self.session_end = None
-        self.last_publish_ts = None
-
-    def should_publish(self, now: datetime) -> bool:
-        if not self.active or not self.session_start:
-            return False
-        if self.last_publish_ts is None:
-            return True
-        return (now - self.last_publish_ts).total_seconds() >= SAMPLE_INTERVAL_SECONDS
-
-    def generate_payload(self, now: datetime) -> dict:
-        assert self.session_start and self.session_end
-        # temp drift update
-        self.temp_update_counter += 1
-        if (self.temp_update_counter * SAMPLE_INTERVAL_SECONDS) % TEMP_UPDATE_INTERVAL == 0:
-            self.current_temp += self.temp_drift * (TEMP_UPDATE_INTERVAL / 60.0)
-            self.current_temp = max(TEMP_MIN, min(TEMP_MAX, self.current_temp))
-        # consumption per second
-        self.current_weight = max(0.0, self.current_weight - self.consumption_rate)
-        noise = random.gauss(0, WEIGHT_NOISE_STD)
-        if random.random() < self.spike_probability:
-            noise += random.choice([-1, 1]) * self.spike_magnitude
-        weight = max(0.0, self.current_weight + noise)
-        rfid = self.cow.get("rfid")
-        device_id = RFID_TO_DEVICE.get(rfid) if rfid else None
-        payload = {
-            "timestamp": now.isoformat(),
-            "device_id": device_id,
-            "rfid_id": rfid,
-            "weight": round(weight, 3),
-            "temperature_c": round(self.current_temp, 2),
-            "ip": SHARED_IP,
-        }
-        # Note: do NOT include profile/ground-truth fields in the main payload to
-        # keep the message schema compatible with backfill_monthly_timescale.py.
-        # Ground-truth or labels should be sent to a separate topic or stored in DB
-        # if needed. We intentionally avoid adding extra fields here.
-        self.last_publish_ts = now
-        return payload
-
-# ----------------------- Simulator -----------------------
-class ForwardRealtimeSimulator:
-    def __init__(self, db_dsn: str, mqtt_host: str, mqtt_port: int, topic_prefix: str, profiles_path: str = PROFILES_PATH):
-        self.db = DBClient(db_dsn)
-        self.mqtt = MQTTWriter(mqtt_host, mqtt_port)
-        self.topic_prefix = topic_prefix.rstrip("/")
-        self.cow_sims: Dict[str, CowSimulator] = {}
-        self.running = False
-        self.lock = threading.Lock()
-        self.profiles_path = profiles_path
-        self.profiles_cfg = load_profiles(self.profiles_path)
-
-    def load_cows_for_farmer(self, farmer_id: str):
-        cows = self.db.fetch_cows_for_farmer(farmer_id)
-        for c in cows:
-            if c["cow_id"] not in self.cow_sims:
-                self.cow_sims[c["cow_id"]] = CowSimulator(c, profiles_cfg=self.profiles_cfg)
-
-    def activate_cow(self, cow_id: str):
-        if cow_id in self.cow_sims:
-            self.cow_sims[cow_id].active = True
-
-    def deactivate_cow(self, cow_id: str):
-        if cow_id in self.cow_sims:
-            self.cow_sims[cow_id].active = False
-
-    def set_profile(self, cow_id: str, profile_name: str) -> bool:
-        sim = self.cow_sims.get(cow_id)
-        if not sim:
-            return False
-        if profile_name not in self.profiles_cfg.get("profiles", {}):
-            return False
-        sim.profile_name = profile_name
-        sim.reset_model_params()
-        return True
-
-    def set_duration(self, cow_id: str, minutes: int) -> bool:
-        sim = self.cow_sims.get(cow_id)
-        if not sim:
-            return False
-        sim.session_duration_min = minutes
-        return True
-
-    def reload_profiles(self):
-        self.profiles_cfg = load_profiles(self.profiles_path)
-        for sim in self.cow_sims.values():
-            sim.profiles_cfg = self.profiles_cfg
-            sim.profile_name = self.profiles_cfg.get("overrides", {}).get(sim.cow.get("cow_id"), sim.profile_name)
-            sim.reset_model_params()
-
-    def status(self):
-        return {cid: {"active": sim.active, "name": sim.cow["name"], "profile": sim.profile_name} for cid, sim in self.cow_sims.items()}
-
-    def run_loop(self):
-        self.running = True
-        while self.running:
-            now = datetime.now()
-            with self.lock:
-                for cid, sim in self.cow_sims.items():
-                    sim.maybe_start_session(now)
-                    if sim.should_publish(now):
-                        payload = sim.generate_payload(now)
-                        topic = f"{self.topic_prefix}/{payload.get('rfid_id') or cid}"
-                        self.mqtt.publish(topic, payload)
-            time.sleep(0.2)
-
-    def start(self):
-        t = threading.Thread(target=self.run_loop, daemon=True)
-        t.start()
-
-    def stop(self):
-        self.running = False
-
-# ----------------------- CLI -----------------------
-
-def interactive_cli(sim: ForwardRealtimeSimulator, farmer_id: str):
-    print("Commands: list, activate <cow_id>, deactivate <cow_id>, status, set_profile <cow_id> <profile>, set_duration <cow_id> <minutes>, show_profiles, reload_profiles, quit")
-    while True:
-        try:
-            parts = input("> ").strip().split()
-        except (EOFError, KeyboardInterrupt):
-            sim.stop()
-            break
-        if not parts:
-            continue
-        cmd = parts[0]
-        if cmd == "list":
-            for cid, info in sim.status().items():
-                print(f"{cid}: {info['name']} (active={info['active']}, profile={info['profile']})")
-        elif cmd == "activate" and len(parts) >= 2:
-            sim.activate_cow(parts[1]); print("ok")
-        elif cmd == "deactivate" and len(parts) >= 2:
-            sim.deactivate_cow(parts[1]); print("ok")
-        elif cmd == "status":
-            print(sim.status())
-        elif cmd == "set_profile" and len(parts) == 3:
-            ok = sim.set_profile(parts[1], parts[2]); print("ok" if ok else "failed")
-        elif cmd == "set_duration" and len(parts) == 3:
-            try:
-                mins = int(parts[2])
-            except ValueError:
-                print("invalid minutes")
-                continue
-            ok = sim.set_duration(parts[1], mins); print("ok" if ok else "failed")
-        elif cmd == "show_profiles":
-            print("Profiles:\n", json.dumps(sim.profiles_cfg.get("profiles", {}), indent=2))
-            print("Overrides:\n", json.dumps(sim.profiles_cfg.get("overrides", {}), indent=2))
-        elif cmd == "reload_profiles":
-            sim.reload_profiles(); print("reloaded")
-        elif cmd == "quit":
-            sim.stop(); break
+    
+    def _on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            self.logger.info(f"✓ Connected to MQTT broker at {self.host}:{self.port}")
         else:
-            print("unknown command")
+            self.logger.error(f"✗ Failed to connect to MQTT broker (code {rc})")
+    
+    def publish(self, topic: str, payload: dict):
+        """Publish JSON payload to MQTT topic"""
+        result = self.client.publish(topic, json.dumps(payload), qos=1)
+        if not result.is_published():
+            self.logger.warning(f"Failed to publish to {topic}")
 
-# ----------------------- Main -----------------------
+
+# ============================================================================
+# DEVICE SESSION SIMULATOR
+# ============================================================================
+
+class DeviceSessionSimulator:
+    """Simulates a single feeding session for one device"""
+    
+    def __init__(self, device_id: str, session_start: datetime, duration_min: float):
+        self.device_id = device_id
+        self.rfid_id = RFID_MAPPING[device_id]
+        self.session_start = session_start
+        self.duration_min = duration_min
+        self.session_end = session_start + timedelta(minutes=duration_min)
+        
+        # Initialize weight parameters
+        self.initial_weight = random.uniform(INITIAL_WEIGHT_MIN, INITIAL_WEIGHT_MAX)
+        self.consumption_rate = random.uniform(CONSUMPTION_RATE_MIN, CONSUMPTION_RATE_MAX)
+        self.current_weight = self.initial_weight
+        
+        # Initialize temperature parameters
+        self.current_temp = random.uniform(TEMP_MIN, TEMP_MAX)
+        self.temp_drift = random.uniform(-TEMP_DRIFT_RATE, TEMP_DRIFT_RATE)
+        
+        self.elapsed_seconds = 0
+        self.readings_count = 0
+        self.logger = logging.getLogger(__name__)
+
+    
+    def is_active(self, now: datetime) -> bool:
+        """Check if session is currently active"""
+        return self.session_start <= now < self.session_end
+    
+    def generate_reading(self, now: datetime) -> Optional[dict]:
+        """Generate a single sensor reading for current timestamp"""
+        if not self.is_active(now):
+            return None
+        
+        # Calculate seconds from session start
+        seconds_from_start = int((now - self.session_start).total_seconds())
+        self.elapsed_seconds = seconds_from_start
+        self.readings_count += 1
+        
+        # Update temperature every 60 seconds
+        if seconds_from_start % TEMP_UPDATE_INTERVAL == 0:
+            self.current_temp += self.temp_drift * (TEMP_UPDATE_INTERVAL / 60)
+            self.current_temp = np.clip(self.current_temp, TEMP_MIN, TEMP_MAX)
+        
+        # Determine feeding phase
+        duration_seconds = int(self.duration_min * 60)
+        in_buffer_start = seconds_from_start < BUFFER_TIME_SECONDS
+        in_buffer_end = seconds_from_start >= (duration_seconds - BUFFER_TIME_SECONDS)
+        
+        # Weight behavior
+        if in_buffer_start or in_buffer_end:
+            # Buffer phase: weight stays constant with small noise
+            noise = np.random.normal(0, WEIGHT_NOISE_STD * 0.5)
+            weight = self.current_weight + noise
+        else:
+            # Active feeding: decrease weight
+            self.current_weight -= self.consumption_rate
+            noise = np.random.normal(0, WEIGHT_NOISE_STD)
+            
+            # Random spike
+            if random.random() < SPIKE_PROBABILITY:
+                noise += random.choice([-1, 1]) * SPIKE_MAGNITUDE
+            
+            weight = self.current_weight + noise
+        
+        # Format payload with new structure
+        # {"ip": "10.18.236.88", "id": "01", "rfid": "C96EF997", "w": 85.61, "temp": 84.89, "ts": "2000-01-01T07:04:07+07:00"}
+        return {
+            "ip": SHARED_IP,
+            "id": self.device_id.zfill(2),  # "1" -> "01"
+            "rfid": self.rfid_id,
+            "w": round(max(0, weight), 2),
+            "temp": round(self.current_temp, 2),
+            "ts": now.astimezone(TZ_OFFSET).isoformat()
+        }
+    
+    def get_metadata(self) -> dict:
+        """Get session metadata for logging"""
+        return {
+            "device_id": self.device_id,
+            "rfid_id": self.rfid_id,
+            "session_start": self.session_start.isoformat(),
+            "session_end": self.session_end.isoformat(),
+            "duration_min": round(self.duration_min, 2),
+            "initial_weight_kg": round(self.initial_weight, 3),
+            "consumption_rate_kg_per_sec": round(self.consumption_rate, 6),
+            "initial_temp_c": round(self.current_temp, 2),
+            "temp_drift_c_per_min": round(self.temp_drift, 4),
+            "total_readings": self.readings_count,
+        }
+
+
+
+
+# ============================================================================
+# REALTIME SIMULATOR
+# ============================================================================
+
+class RealtimeSimulator:
+    """Main simulator coordinating all devices"""
+    
+    def __init__(self, mqtt_host: str, mqtt_port: int, topic_prefix: str):
+        self.mqtt = MQTTPublisher(mqtt_host, mqtt_port)
+        self.topic_prefix = topic_prefix.rstrip("/")
+        self.active_sessions: Dict[str, DeviceSessionSimulator] = {}
+        self.next_session_time: Dict[str, datetime] = {}  # Track when each device can start next session
+        self.logger = logging.getLogger(__name__)
+        self.running = False
+        
+        # Setup metadata logging
+        import os
+        os.makedirs(SESSION_METADATA_DIR, exist_ok=True)
+        self.metadata_file = open(SESSION_METADATA_FILE, "a", encoding="utf-8")
+        self.logger.info(f"Session metadata will be logged to: {SESSION_METADATA_FILE}")
+        
+        # Initialize all devices to start immediately
+        for device_id in DEVICE_IDS:
+            self.next_session_time[device_id] = datetime.now()
+
+    
+    def _start_new_session_if_ready(self, device_id: str, now: datetime):
+        """Start a new session for device if it's ready and not currently active"""
+        # Check if device already has an active session
+        active_key = None
+        for key, session in self.active_sessions.items():
+            if session.device_id == device_id and session.is_active(now):
+                active_key = key
+                break
+        
+        if active_key:
+            return  # Device is still in session
+        
+        # Check if enough time has passed since last session
+        if now < self.next_session_time.get(device_id, now):
+            return  # Not ready yet
+        
+        # Start new session
+        duration = NORMAL_FEEDING_DURATION_MIN + random.uniform(
+            -FEEDING_DURATION_JITTER_MIN, FEEDING_DURATION_JITTER_MIN
+        )
+        
+        session = DeviceSessionSimulator(device_id, now, duration)
+        session_key = f"{device_id}_{now.isoformat()}"
+        self.active_sessions[session_key] = session
+        
+        # Schedule next session after this one ends + interval
+        session_end = now + timedelta(minutes=duration)
+        self.next_session_time[device_id] = session_end + timedelta(minutes=INTERVAL_BETWEEN_SESSIONS_MIN)
+        
+        self.logger.info(
+            f"Started: Device {device_id} at {now.strftime('%H:%M:%S')} "
+            f"for {duration:.1f} min (next session at {self.next_session_time[device_id].strftime('%H:%M:%S')})"
+        )
+
+    
+    def _cleanup_old_sessions(self, now: datetime):
+        """Remove sessions that have ended and log their metadata"""
+        to_remove = [
+            key for key, session in self.active_sessions.items()
+            if session.session_end < now
+        ]
+        for key in to_remove:
+            session = self.active_sessions[key]
+            # Log session metadata to JSONL
+            metadata = session.get_metadata()
+            metadata["session_key"] = key
+            metadata["completed_at"] = now.isoformat()
+            
+            self.metadata_file.write(json.dumps(metadata) + "\n")
+            self.metadata_file.flush()
+            
+            self.logger.info(
+                f"Session completed: Device {session.device_id} "
+                f"({session.readings_count} readings, "
+                f"{session.duration_min:.1f} min)"
+            )
+            
+            del self.active_sessions[key]
+
+    
+    def run(self):
+        """Main simulation loop"""
+        self.running = True
+        self.logger.info("=" * 80)
+        self.logger.info("🐄 REALTIME CATTLE FEEDING SIMULATOR — CONTINUOUS MODE")
+        self.logger.info("=" * 80)
+        self.logger.info(f"Devices: {', '.join(DEVICE_IDS)}")
+        self.logger.info(f"Session duration: ~{NORMAL_FEEDING_DURATION_MIN} min")
+        self.logger.info(f"Interval between sessions: {INTERVAL_BETWEEN_SESSIONS_MIN} min")
+        self.logger.info(f"MQTT broker: {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
+        self.logger.info(f"Topic prefix: {self.topic_prefix}")
+        self.logger.info("=" * 80)
+        
+        while self.running:
+            try:
+                now = datetime.now()
+                
+                # Try to start new sessions for each device if ready
+                for device_id in DEVICE_IDS:
+                    self._start_new_session_if_ready(device_id, now)
+                
+                # Generate and publish readings from active sessions
+                for session in self.active_sessions.values():
+                    if session.is_active(now):
+                        reading = session.generate_reading(now)
+                        if reading:
+                            topic = f"{self.topic_prefix}/{reading['rfid']}"
+                            self.mqtt.publish(topic, reading)
+                
+                # Cleanup old sessions
+                self._cleanup_old_sessions(now)
+                
+                # Sleep until next second
+                time.sleep(SAMPLING_RATE_SECONDS)
+
+                
+            except KeyboardInterrupt:
+                self.logger.info("\n⚠ Interrupted by user")
+                break
+            except Exception as e:
+                self.logger.error(f"Error in main loop: {e}", exc_info=True)
+                time.sleep(5)
+        
+        # Close metadata file on exit
+        self.metadata_file.close()
+        self.logger.info("✓ Simulator stopped")
+
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+def setup_logging():
+    """Configure logging"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+
+def main():
+    """Main entry point"""
+    setup_logging()
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Connecting to MQTT broker at {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
+    
+    # Create and run simulator
+    simulator = RealtimeSimulator(
+        mqtt_host=MQTT_BROKER_HOST,
+        mqtt_port=MQTT_BROKER_PORT,
+        topic_prefix=MQTT_TOPIC_PREFIX
+    )
+    
+    simulator.run()
+    return 0
+
+
 if __name__ == "__main__":
-    import argparse
-    p = argparse.ArgumentParser()
-    p.add_argument("--farmer-id", help="farmer_id to load cows for", required=False)
-    args = p.parse_args()
+    exit(main())
 
-    if not POSTGRE_URI:
-        raise RuntimeError("POSTGRE_URI missing in env")
-
-    sim = ForwardRealtimeSimulator(POSTGRE_URI, MQTT_BROKER_HOST, MQTT_BROKER_PORT, MQTT_TOPIC_PREFIX)
-
-    farmer_id = args.farmer_id
-    if not farmer_id:
-        dbcli = DBClient(POSTGRE_URI)
-        farmers = dbcli.fetch_farmers()
-        print("Farmers:")
-        for f in farmers:
-            print(f"{f['farmer_id']} - {f['name']}")
-        farmer_id = input("Enter farmer_id to simulate: ").strip()
-
-    sim.load_cows_for_farmer(farmer_id)
-    sim.start()
-    print("Realtime simulator started. Activate cows to publish during 08:00 and 14:00 sessions.")
-    interactive_cli(sim, farmer_id)
