@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import asyncpg
 from db.postgresql import connect_to_db, close_db_connection, get_db_connection
 import asyncio
+from fastapi import Request
 
 from api.api_router import api_router
 from mqtt.client import mqtt_listener_task, session_timeout_checker_task
@@ -90,5 +91,9 @@ async def health_check(
         )
 
     return {"api_status": "ok", "db_status": db_status, "message": db_message}
+
+@app.options("/{path:path}")
+async def preflight_handler(path: str, request: Request):
+    return {}
 
 app.include_router(api_router, prefix="/api")
