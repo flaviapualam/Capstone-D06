@@ -1,0 +1,41 @@
+profiles:
+  normal:
+    duration_min: 60
+    duration_jitter_min: 5
+    start_jitter_min: 2
+    consumption_rate_min: 0.002
+    consumption_rate_max: 0.0025
+    weight_start_min: 6.8
+    weight_start_max: 7.3
+    spike_probability: 0.005
+    spike_magnitude: 0.3
+    no_show_prob: 0.0
+    include_gt: false
+
+  short_feed:
+    duration_min: 20
+    duration_jitter_min: 3
+    start_jitter_min: 5
+    consumption_rate_min: 0.001
+    consumption_rate_max: 0.0015
+    weight_start_min: 6.4
+    weight_start_max: 7.0
+    spike_probability: 0.01
+    spike_magnitude: 0.2
+    no_show_prob: 0.0
+    include_gt: true
+
+  no_show:
+    duration_min: 0
+    duration_jitter_min: 0
+    start_jitter_min: 0
+    consumption_rate_min: 0.0
+    consumption_rate_max: 0.0
+    weight_start_min: 0.0
+    weight_start_max: 0.0
+    spike_probability: 0.0
+    spike_magnitude: 0.0
+    no_show_prob: 1.0
+    include_gt: true
+
+overrides: {}
