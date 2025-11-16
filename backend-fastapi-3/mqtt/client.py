@@ -1,8 +1,8 @@
-# mqtt/client.py
 import asyncio
 import json
 import asyncpg
 import aiomqtt
+# 1. Pastikan datetime diimpor dari datetime
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any
 
@@ -10,23 +10,16 @@ from core.config import settings
 from services.crud_sensor import batch_insert_sensor_data 
 from services.crud_device import upsert_device_status
 from services.crud_rfid import upsert_rfid_tags
-# 1. Impor service baru kita
+# Impor service sesi
 from services.crud_session import get_active_cow_by_rfid, create_eat_session
 
-# --- Buffer untuk 'output_sensor' (tetap sama) ---
 MQTT_DATA_BUFFER: List[Dict[str, Any]] = []
 BUFFER_SIZE = 100 
 BUFFER_TIMEOUT = 5.0 
 
-# --- State Machine untuk 'eat_session' (BARU) ---
-# Kamus untuk melacak sesi yang sedang aktif di setiap perangkat
-# Key: device_id, Value: dict state sesi
 ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
-
-# Timeout sesi sekarang 1 menit (60 detik)
 SESSION_TIMEOUT_SECONDS = 60 
 
-# --- FUNGSI BUFFER (Logika ini tetap sama) ---
 async def flush_buffer_to_db(pool: asyncpg.Pool):
     global MQTT_DATA_BUFFER
     if not MQTT_DATA_BUFFER:
@@ -37,12 +30,12 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
     
     device_updates: Dict[str, Tuple(str, datetime)] = {}
     output_sensor_batch: List[Tuple] = []
-    rfid_ids_to_register: set = set()
+    rfid_ids_to_register: set = set() 
 
     for msg in current_batch_dicts:
         output_sensor_batch.append(
             (
-                msg['timestamp'],
+                msg['timestamp'], # Ini sekarang adalah objek datetime
                 msg['device_id'],
                 msg['rfid_id'],
                 msg['weight'],
@@ -55,7 +48,10 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
         if rfid:
             rfid_ids_to_register.add(rfid)
 
-    device_upsert_batch = [(d, data[0], data[1]) for d, data in device_updates.items()]
+    device_upsert_batch = [
+        (device_id, data[0], data[1]) 
+        for device_id, data in device_updates.items()
+    ]
     rfid_upsert_batch = [(rfid,) for rfid in rfid_ids_to_register]
     
     try:
@@ -70,15 +66,10 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
         print(f"Failed to flush MQTT buffer to DB: {e}")
         MQTT_DATA_BUFFER.extend(current_batch_dicts)
 
-
-# --- FUNGSI LOGIKA SESI (BARU) ---
-
 async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: float, last_timestamp: datetime):
-    """Mengakhiri sesi dan menyimpannya ke DB."""
     state = ACTIVE_SESSIONS.pop(device_id, None)
     if not state:
         return
-
     async with pool.acquire() as db:
         await create_eat_session(
             db=db,
@@ -98,12 +89,10 @@ async def start_new_session(
     weight: float, 
     timestamp: datetime
 ):
-    """Memvalidasi RFID dan memulai sesi baru di memori."""
     cow_id = None
     async with pool.acquire() as db:
         cow_id = await get_active_cow_by_rfid(db, rfid_id)
     
-    # Constraint: Hanya mulai jika RFID terdaftar dan dimiliki
     if not cow_id:
         print(f"Ignoring session start for unassigned RFID: {rfid_id}")
         return
@@ -119,68 +108,75 @@ async def start_new_session(
     print(f"(SESSION START) Cow {cow_id} detected at {device_id}.")
 
 async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
-    """
-    Memproses SATU pesan MQTT:
-    1. Menambahkannya ke buffer output_sensor.
-    2. Menjalankan state machine untuk eat_session.
-    """
     global MQTT_DATA_BUFFER
     
     try:
         payload = json.loads(message.payload.decode())
+        
+        # 1. Ambil identifier dari payload (sesuai info Anda)
         device_id = payload.get("id")
         if not device_id:
+            print(f"Error: 'id' (device_id) tidak ditemukan di payload MQTT: {payload}")
             return
 
-        # Ambil timestamp dari server, BUKAN dari payload
-        timestamp = datetime.now()
+        # --- PERBAIKAN DIMULAI DI SINI ---
+        client_timestamp_str = payload.get("ts")
+        timestamp_obj: datetime
         
-        # 1. Tambahkan ke Buffer (untuk 'output_sensor' dan 'device')
+        if not client_timestamp_str:
+            print(f"Warning: 'ts' (timestamp) tidak ada di payload. Gunakan waktu server.")
+            timestamp_obj = datetime.now()
+        else:
+            try:
+                # Parse string ISO 8601 (e.g., "2025-11-16T21:40:00.689538+07:00")
+                timestamp_obj = datetime.fromisoformat(client_timestamp_str)
+            except (ValueError, TypeError):
+                print(f"Error: Format 'ts' tidak valid: '{client_timestamp_str}'. Gunakan waktu server.")
+                timestamp_obj = datetime.now()
+        # --- AKHIR PERBAIKAN ---
+        
+        # 3. Ambil identifier lain
+        new_rfid = payload.get("rfid")
+        new_weight = payload.get("w")
+        
+        # 4. Tambahkan ke Buffer (untuk 'output_sensor')
         record_dict = {
-            "timestamp": payload.get("ts"), # Gunakan timestamp server
+            "timestamp": timestamp_obj, # <-- Gunakan objek datetime
             "device_id": device_id,
-            "rfid_id": payload.get("rfid"),
-            "weight": payload.get("w"),
+            "rfid_id": new_rfid,
+            "weight": new_weight,
             "temperature_c": payload.get("temp"),
             "ip": payload.get("ip")
         }
         MQTT_DATA_BUFFER.append(record_dict)
 
-        # 2. Jalankan State Machine (untuk 'eat_session')
-        new_rfid = payload.get("rfid_id")
-        new_weight = payload.get("weight")
-        
+        # 5. Jalankan State Machine (untuk 'eat_session')
         state = ACTIVE_SESSIONS.get(device_id)
         current_rfid = state['rfid_id'] if state else None
         
         if new_rfid == current_rfid:
-            # KASUS 1: Sesi berlanjut (atau feeder tetap kosong)
+            # Sesi berlanjut
             if state:
                 state['last_weight'] = new_weight
-                state['last_seen'] = timestamp
+                state['last_seen'] = timestamp_obj # Update last_seen
         else:
-            # KASUS 2: Terjadi perubahan!
-            
-            # Jika ada sesi LAMA, akhiri dulu
+            # Perubahan Sesi
             if state:
+                # Akhiri sesi lama (gunakan 'last_seen' dari state)
                 await finalize_session(pool, device_id, state['last_weight'], state['last_seen'])
             
-            # Jika ada RFID BARU, mulai sesi baru
             if new_rfid and new_weight is not None:
-                await start_new_session(pool, device_id, new_rfid, new_weight, timestamp)
+                # Mulai sesi baru dengan timestamp pesan ini
+                await start_new_session(pool, device_id, new_rfid, new_weight, timestamp_obj)
                 
     except Exception as e:
         print(f"Error processing MQTT message: {e}")
         print(f"Topic: {str(message.topic)}, Payload: {message.payload.decode()}")
 
-# --- FUNGSI TASK (Logika diubah) ---
-
 async def check_session_timeouts(pool: asyncpg.Pool):
-    """Fungsi pembantu yang menjalankan logika timeout."""
     now = datetime.now()
     timeout_threshold = timedelta(seconds=SESSION_TIMEOUT_SECONDS)
     
-    # Buat salinan keys() untuk menghindari error 'dictionary changed size'
     for device_id in list(ACTIVE_SESSIONS.keys()):
         state = ACTIVE_SESSIONS.get(device_id)
         if not state: 
@@ -196,20 +192,14 @@ async def check_session_timeouts(pool: asyncpg.Pool):
             )
 
 async def session_timeout_checker_task(pool: asyncpg.Pool):
-    """
-    (TASK 1) Berjalan di background, mengecek sesi timeout setiap 10 detik.
-    """
     while True:
-        await asyncio.sleep(10) # Cek setiap 10 detik
+        await asyncio.sleep(10)
         try:
             await check_session_timeouts(pool)
         except Exception as e:
             print(f"Error in session timeout checker task: {e}")
 
 async def mqtt_listener_task(pool: asyncpg.Pool):
-    """
-    (TASK 2) Berjalan di background, mendengarkan MQTT dan mem-flush buffer.
-    """
     subscription_topic = f"{settings.MQTT_TOPIC_PREFIX}"
     print(f"Connecting to MQTT Broker at {settings.MQTT_BROKER_HOST}...")
     
@@ -225,7 +215,6 @@ async def mqtt_listener_task(pool: asyncpg.Pool):
                 await client.subscribe(subscription_topic)
                 
                 async for message in client.messages:
-                    # Teruskan 'pool' ke process_mqtt_message
                     await process_mqtt_message(pool, message)
                     
                     current_time = asyncio.get_event_loop().time()
