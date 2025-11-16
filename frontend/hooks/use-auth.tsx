@@ -35,6 +35,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  // Listen for unauthorized events (401 responses) from API calls
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      console.log('Unauthorized event received - logging out');
+      setUser(null);
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
+  }, []);
+
   const login = async (email: string, password: string) => {
     const response = await authApi.login({ email, password });
     if (response.success && response.data) {
