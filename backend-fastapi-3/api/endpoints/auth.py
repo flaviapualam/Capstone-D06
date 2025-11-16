@@ -69,8 +69,8 @@ async def login_farmer(
         key="access_token", # Nama cookie
         value=f"Bearer {access_token}", 
         httponly=True,      
-        secure=True,        
-        samesite="lax",  
+        secure=False,        
+        samesite="None",  
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 
     )
     
