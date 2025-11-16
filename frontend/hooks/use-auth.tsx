@@ -20,26 +20,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Try to get current user from backend (cookie-based auth)
+    // Get current user from backend cookie-based auth only
     (async () => {
       try {
         const resp = await authApi.me();
         if (resp.success && resp.data) {
           setUser(resp.data.user);
-          localStorage.setItem('user', JSON.stringify(resp.data.user));
-        } else {
-          // fallback to localStorage if present
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            try {
-              setUser(JSON.parse(storedUser));
-            } catch (e) {
-              localStorage.removeItem('user');
-            }
-          }
         }
       } catch (e) {
-        // ignore - leave user as null
+        // Cookie invalid/expired - user stays null
       } finally {
         setLoading(false);
       }
@@ -50,8 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await authApi.login({ email, password });
     if (response.success && response.data) {
       setUser(response.data.user);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      // token is cookie-based and not stored on client
     } else {
       throw new Error(response.error || 'Login failed');
     }
@@ -61,7 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await authApi.register({ name, email, password, confirmPassword: password });
     if (response.success && response.data) {
       setUser(response.data.user);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
     } else {
       throw new Error(response.error || 'Registration failed');
     }
@@ -69,8 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
+    // Cookie will be invalidated by backend or expire naturally
   };
 
   const forgotPassword = async (email: string) => {

@@ -128,6 +128,19 @@ export const authApi = {
     // backend v3 does not expose logout - clear frontend state only
     return { success: true, data: { message: 'Logged out (frontend only)' } };
   },
+
+  forgotPassword: async (email: string): Promise<ApiResponse<{ message: string }>> => {
+    // Placeholder - backend does not implement password reset yet
+    // When backend adds /api/auth/forgot-password endpoint, uncomment:
+    // return apiCall<{ message: string }>('/api/auth/forgot-password', {
+    //   method: 'POST',
+    //   body: JSON.stringify({ email }),
+    // });
+    return { 
+      success: false, 
+      error: 'Password reset not implemented on backend' 
+    };
+  },
 };
 
 // Cattle API (maps to /api/cow endpoints on backend v3)
