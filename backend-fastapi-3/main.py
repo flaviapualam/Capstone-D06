@@ -55,6 +55,7 @@ app.add_middleware(
     "http://103.181.161.143:3000",
     "http://103.181.161.143",
     "https://103.181.161.143",
+    "https://project-capstone.my.id"
     ],
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, OPTIONS, etc.)
