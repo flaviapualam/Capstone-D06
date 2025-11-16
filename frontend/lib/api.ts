@@ -1,7 +1,10 @@
 import { ApiResponse, User, LoginCredentials, RegisterData, Cattle, CattleRegistrationData, SensorReading, Sensor } from '@/types';
 
 // Base API configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use relative base by default so browser requests go to the same origin
+// (Next.js can rewrite `/api/*` to an external backend during development).
+// If NEXT_PUBLIC_API_URL is set (e.g., production), use that instead.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 console.log('API Base URL:', API_BASE_URL);
 
