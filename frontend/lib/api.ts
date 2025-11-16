@@ -26,6 +26,19 @@ async function apiCall<T>(
 
     console.log('Response status:', response.status, response.statusText);
 
+    // Handle 401 Unauthorized - token expired or invalid
+    if (response.status === 401) {
+      console.warn('Authentication failed - dispatching logout event');
+      // Trigger logout event for AuthProvider to handle
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
+      return {
+        success: false,
+        error: 'Session expired. Please login again.',
+      };
+    }
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMessage = errorData.detail || errorData.message || `HTTP ${response.status}: ${response.statusText}`;
@@ -144,7 +157,7 @@ export const authApi = {
 // Cattle API (maps to /api/cow endpoints on backend v3)
 export const cattleApi = {
   getAll: async (): Promise<ApiResponse<Cattle[]>> => {
-    const response = await apiCall<any[]>('/api/cow', { method: 'GET' });
+    const response = await apiCall<any[]>('/api/cow/', { method: 'GET' });
     if (response.success && response.data) {
       const cattle: Cattle[] = response.data.map((cow: any) => {
         // Backend returns date_of_birth; compute age if possible
@@ -183,7 +196,7 @@ export const cattleApi = {
       payload.gender = cattleData.gender;
     }
 
-    const response = await apiCall<any>('/api/cow', {
+    const response = await apiCall<any>('/api/cow/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
