@@ -128,7 +128,7 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
     
     try:
         payload = json.loads(message.payload.decode())
-        device_id = payload.get("device_id")
+        device_id = payload.get("id")
         if not device_id:
             return
 
@@ -137,11 +137,11 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
         
         # 1. Tambahkan ke Buffer (untuk 'output_sensor' dan 'device')
         record_dict = {
-            "timestamp": timestamp, # Gunakan timestamp server
+            "timestamp": payload.get("ts"), # Gunakan timestamp server
             "device_id": device_id,
-            "rfid_id": payload.get("rfid_id"),
-            "weight": payload.get("weight"),
-            "temperature_c": payload.get("temperature_c"),
+            "rfid_id": payload.get("rfid"),
+            "weight": payload.get("w"),
+            "temperature_c": payload.get("temp"),
             "ip": payload.get("ip")
         }
         MQTT_DATA_BUFFER.append(record_dict)
