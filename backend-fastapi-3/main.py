@@ -96,4 +96,4 @@ async def health_check(
 async def preflight_handler(path: str, request: Request):
     return {}
 
-app.include_router(api_router, prefix="/api")
+app.include_router(api_router, prefix="")
