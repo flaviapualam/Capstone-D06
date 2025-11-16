@@ -74,22 +74,49 @@ class MQTTPublisher:
     def __init__(self):
         self.client = mqtt.Client()
         self.logger = logging.getLogger(__name__)
+        self.connected = False
         
         self.client.on_connect = self._on_connect
-        self.client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
-        self.client.loop_start()
+        self.client.on_disconnect = self._on_disconnect
+        
+        try:
+            self.client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
+            self.client.loop_start()
+            
+            # Wait for connection (max 5 seconds)
+            wait_time = 0
+            while not self.connected and wait_time < 5:
+                time.sleep(0.1)
+                wait_time += 0.1
+            
+            if not self.connected:
+                self.logger.warning("⚠ MQTT connection timeout - will retry on publish")
+                
+        except Exception as e:
+            self.logger.error(f"✗ Failed to connect to MQTT broker: {e}")
     
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
+            self.connected = True
             self.logger.info(f"✓ Connected to MQTT broker at {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
         else:
+            self.connected = False
             self.logger.error(f"✗ Failed to connect to MQTT broker (code {rc})")
+    
+    def _on_disconnect(self, client, userdata, rc):
+        self.connected = False
+        if rc != 0:
+            self.logger.warning(f"⚠ Disconnected from MQTT broker (code {rc})")
     
     def publish(self, topic: str, payload: dict):
         """Publish JSON payload to MQTT topic"""
-        result = self.client.publish(topic, json.dumps(payload), qos=1)
-        if not result.is_published():
-            self.logger.warning(f"Failed to publish to {topic}")
+        if not self.connected:
+            return  # Skip if not connected
+        
+        try:
+            self.client.publish(topic, json.dumps(payload), qos=0)
+        except Exception as e:
+            self.logger.warning(f"Failed to publish: {e}")
 
 
 # ============================================================================
