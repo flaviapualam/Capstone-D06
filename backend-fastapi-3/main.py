@@ -93,8 +93,8 @@ async def health_check(
 
     return {"api_status": "ok", "db_status": db_status, "message": db_message}
 
-@app.options("/{path:path}")
-async def preflight_handler(path: str, request: Request):
-    return {}
+# @app.options("/{path:path}")
+# async def preflight_handler(path: str, request: Request):
+#     return {}
 
 app.include_router(api_router, prefix="")
