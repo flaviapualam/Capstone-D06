@@ -25,6 +25,7 @@ import numpy as np
 MQTT_BROKER_HOST = "localhost"
 MQTT_BROKER_PORT = 1883
 MQTT_TOPIC_PREFIX = "cattle/sensor"
+SHARED_IP = "10.18.236.88"
 
 # Constants
 DEVICE_IDS = ["1", "2", "3"]
@@ -33,39 +34,7 @@ RFID_MAPPING = {
     "2": "7F41TR2",
     "3": "9K22PQ9",
 }
-SHARED_IP = "10.18.236.88"
 SAMPLING_RATE_SECONDS = 1
-
-import os
-import time
-import json
-import random
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-import logging
-
-import paho.mqtt.client as mqtt
-from dotenv import load_dotenv
-import numpy as np
-
-# Load environment
-load_dotenv()
-
-MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "localhost")
-MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
-MQTT_TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "cattle/sensor")
-SESSION_LOG_FILE = os.getenv("SESSION_LOG_FILE", "session_metadata.jsonl")
-
-# Constants (same as backfill_monthly_timescale.py)
-DEVICE_IDS = ["1", "2", "3"]
-RFID_MAPPING = {
-    "1": "8H13CJ7",
-    "2": "7F41TR2",
-    "3": "9K22PQ9",
-}
-SHARED_IP = os.getenv("SIMULATOR_IP", "192.168.1.100")
-SAMPLING_RATE_SECONDS = 1
-
 # Feeding behavior parameters
 NORMAL_FEEDING_DURATION_MIN = 60
 FEEDING_DURATION_JITTER_MIN = 10
@@ -87,13 +56,12 @@ TEMP_MAX = 31.0
 TEMP_DRIFT_RATE = 0.02  # °C/min
 TEMP_UPDATE_INTERVAL = 60  # seconds
 
-# Session metadata output (optional logging)
+# Session metadata output
 SESSION_METADATA_DIR = "./session_metadata"
 SESSION_METADATA_FILE = f"{SESSION_METADATA_DIR}/sessions.jsonl"
 
 # Timezone for timestamps
 TZ_OFFSET = timezone(timedelta(hours=7))  # WIB (GMT+7)
-
 
 
 # ============================================================================
@@ -103,19 +71,17 @@ TZ_OFFSET = timezone(timedelta(hours=7))  # WIB (GMT+7)
 class MQTTPublisher:
     """Handle MQTT connection and publishing"""
     
-    def __init__(self, host: str, port: int):
+    def __init__(self):
         self.client = mqtt.Client()
-        self.host = host
-        self.port = port
         self.logger = logging.getLogger(__name__)
         
         self.client.on_connect = self._on_connect
-        self.client.connect(self.host, self.port, keepalive=60)
+        self.client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
         self.client.loop_start()
     
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
-            self.logger.info(f"✓ Connected to MQTT broker at {self.host}:{self.port}")
+            self.logger.info(f"✓ Connected to MQTT broker at {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
         else:
             self.logger.error(f"✗ Failed to connect to MQTT broker (code {rc})")
     
@@ -230,9 +196,9 @@ class DeviceSessionSimulator:
 class RealtimeSimulator:
     """Main simulator coordinating all devices"""
     
-    def __init__(self, mqtt_host: str, mqtt_port: int, topic_prefix: str):
-        self.mqtt = MQTTPublisher(mqtt_host, mqtt_port)
-        self.topic_prefix = topic_prefix.rstrip("/")
+    def __init__(self):
+        self.mqtt = MQTTPublisher()
+        self.topic_prefix = MQTT_TOPIC_PREFIX.rstrip("/")
         self.active_sessions: Dict[str, DeviceSessionSimulator] = {}
         self.next_session_time: Dict[str, datetime] = {}  # Track when each device can start next session
         self.logger = logging.getLogger(__name__)
@@ -335,8 +301,7 @@ class RealtimeSimulator:
                     if session.is_active(now):
                         reading = session.generate_reading(now)
                         if reading:
-                            topic = f"{self.topic_prefix}/{reading['rfid']}"
-                            self.mqtt.publish(topic, reading)
+                            self.mqtt.publish(self.topic_prefix, reading)
                 
                 # Cleanup old sessions
                 self._cleanup_old_sessions(now)
@@ -379,12 +344,7 @@ def main():
     logger.info(f"Connecting to MQTT broker at {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
     
     # Create and run simulator
-    simulator = RealtimeSimulator(
-        mqtt_host=MQTT_BROKER_HOST,
-        mqtt_port=MQTT_BROKER_PORT,
-        topic_prefix=MQTT_TOPIC_PREFIX
-    )
-    
+    simulator = RealtimeSimulator()
     simulator.run()
     return 0
 
