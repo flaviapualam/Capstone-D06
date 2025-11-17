@@ -1,5 +1,6 @@
 # schemas/sensor.py
 from pydantic import BaseModel
+from pydantic.networks import IPvAnyAddress
 from datetime import datetime
 from uuid import UUID
 
@@ -12,7 +13,7 @@ class SensorDataPoint(BaseModel):
     rfid_id: str
     weight: float | None = None
     temperature_c: float | None = None
-    ip: str | None = None
+    ip: IPvAnyAddress | None = None
 
     class Config:
         from_attributes = True
