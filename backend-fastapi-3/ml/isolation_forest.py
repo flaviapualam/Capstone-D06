@@ -2,6 +2,7 @@
 import numpy as np
 import random
 import math
+from typing import List
 
 class Node:
     """Sebuah node di dalam Isolation Tree."""

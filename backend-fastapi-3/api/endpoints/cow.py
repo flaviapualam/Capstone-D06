@@ -1,17 +1,18 @@
 # api/endpoints/cows.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from uuid import UUID
 from typing import List
+from datetime import datetime, timedelta
 
 from schemas.cow import CowCreate, CowUpdate, CowResponse
 from schemas.farmer import FarmerResponse
-# --- IMPOR BARU ---
 from schemas.cow_pregnancy import (
     CowPregnancyCreate, 
     CowPregnancyUpdate, 
     CowPregnancyResponse
 )
-from services import crud_cow, crud_cow_pregnancy 
+from schemas.sensor import SensorDataPoint
+from services import crud_cow, crud_cow_pregnancy, crud_sensor
 from db.postgresql import get_db_connection
 from core.security import get_current_farmer
 import asyncpg
@@ -138,3 +139,34 @@ async def delete_pregnancy_record(
     if not deleted_record:
         raise HTTPException(status_code=404, detail="Rekaman kehamilan tidak ditemukan")
     return deleted_record
+
+@router.get(
+    "/{cow_id}/sensor_history", 
+    response_model=List[SensorDataPoint],
+    tags=["Sensor History"] # Tag terpisah di Swagger
+)
+async def get_cow_sensor_history(
+    # 1. Validasi kepemilikan sapi (otomatis)
+    cow: dict = Depends(get_cow_and_verify_ownership),
+    # 2. Ambil parameter query (misal: /sensor_history?hours=2)
+    #    Defaultnya adalah 1 jam terakhir.
+    hours: int = Query(default=1, ge=1, le=24), 
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """
+    Mengambil data sensor mentah (historis) untuk seekor sapi.
+    Berguna untuk mengisi grafik di frontend sebelum SSE dimulai.
+    """
+    # 3. Tentukan rentang waktu
+    end_time = datetime.now()
+    start_time = end_time - timedelta(hours=hours)
+    
+    # 4. Panggil service untuk mengambil data
+    history = await crud_sensor.get_sensor_history(
+        db, 
+        cow_id=cow['cow_id'], 
+        start_time=start_time, 
+        end_time=end_time
+    )
+    
+    return history
