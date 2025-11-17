@@ -318,11 +318,25 @@ export const monitoringApi = {
   },
 };
 
+// RFID API (maps to /api/rfid endpoints on backend v3)
+export const rfidApi = {
+  assign: async (rfidId: string, cowId: string): Promise<ApiResponse<any>> => {
+    return apiCall<any>('/api/rfid/assign', {
+      method: 'POST',
+      body: JSON.stringify({
+        rfid_id: rfidId,
+        cow_id: cowId,
+      }),
+    });
+  },
+};
+
 export const api = {
   auth: authApi,
   cattle: cattleApi,
   sensor: sensorApi,
   monitoring: monitoringApi,
+  rfid: rfidApi,
 };
 
 export default api;
