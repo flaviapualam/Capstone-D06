@@ -9,6 +9,7 @@ from fastapi import Request
 
 from api.api_router import api_router
 from mqtt.client import mqtt_listener_task, session_timeout_checker_task
+from ml.tasks import periodic_training_task, periodic_prediction_task
 
 mqtt_task = None
 session_task = None 
@@ -21,7 +22,9 @@ async def lifespan(app: FastAPI):
     
     mqtt_task = asyncio.create_task(mqtt_listener_task(pool))
     session_task = asyncio.create_task(session_timeout_checker_task(pool)) # <-- Jalankan task timeout
-    
+    ml_training_task = asyncio.create_task(periodic_training_task(pool))
+    ml_prediction_task = asyncio.create_task(periodic_prediction_task(pool))
+
     yield
     
     if mqtt_task:
@@ -37,7 +40,17 @@ async def lifespan(app: FastAPI):
             await session_task
         except asyncio.CancelledError:
             print("Session timeout checker task successfully cancelled.")
-            
+
+    if ml_training_task:
+        ml_training_task.cancel()
+        try: await ml_training_task
+        except asyncio.CancelledError: print("ML training task successfully cancelled.")
+
+    if ml_prediction_task:
+        ml_prediction_task.cancel()
+        try: await ml_prediction_task
+        except asyncio.CancelledError: print("ML prediction task successfully cancelled.")
+ 
     await close_db_connection()
 
 app = FastAPI(
