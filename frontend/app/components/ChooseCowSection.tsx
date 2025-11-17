@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 import { Cattle } from '@/types';
 import { cattleApi } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, MousePointer } from 'lucide-react';
 import CattleEditModal from './CattleEditModal';
 
 interface ChooseCowSectionProps {
@@ -98,7 +98,10 @@ export default function ChooseCowSection({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Choose Cow</CardTitle>
+          <div className="flex items-center space-x-2">
+            <MousePointer className="w-6 h-6 text-amber-700" />
+            <CardTitle>Choose Cow</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">Loading cattle...</div>
@@ -111,7 +114,10 @@ export default function ChooseCowSection({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Choose Cow</CardTitle>
+          <div className="flex items-center space-x-2">
+            <MousePointer className="w-6 h-6 text-amber-700" />
+            <CardTitle>Choose Cow</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-gray-500">
@@ -126,7 +132,10 @@ export default function ChooseCowSection({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Choose Cow</CardTitle>
+          <div className="flex items-center space-x-2">
+            <MousePointer className="w-6 h-6 text-amber-700" />
+            <CardTitle>Choose Cow</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -148,9 +157,6 @@ export default function ChooseCowSection({
                   <div className="space-y-2 mb-4">
                     <p className="text-sm text-gray-600">
                       <span className="font-medium">Age:</span> {cow.age} years
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Farmer ID:</span> {cow.farmerId.substring(0, 8)}...
                     </p>
                   </div>
 

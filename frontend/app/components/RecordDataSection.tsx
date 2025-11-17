@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { SensorReading } from '@/types';
 import { monitoringApi } from '@/lib/api';
+import { ChartNoAxesCombined, Thermometer, Gauge } from 'lucide-react';
 
 interface RecordDataSectionProps {
   selectedCowName?: string;
@@ -158,8 +159,11 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Record Data</h2>
-            <p className="text-sm text-gray-600 mt-1">Track eating patterns and health metrics</p>
+            <div className="flex items-center space-x-2">
+              <ChartNoAxesCombined className="w-7 h-7 text-purple-600" />
+              <h2 className="text-2xl font-bold text-gray-900">Record Data</h2>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">Track eating patterns</p>
           </div>
 
           {/* Time Range Dropdown */}
@@ -185,12 +189,15 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
         {/* Temperature Monitoring */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Temperature Trend
-              <span className="text-sm font-normal text-gray-500">°C</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+            <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Thermometer className="w-5 h-5 text-red-500" />
+              <CardTitle>Temperature Trend</CardTitle>
+            </div>
+            <span className="text-sm font-normal text-gray-500">°C</span>
+          </div>
+        </CardHeader>
+        <CardContent>
             {temperatureData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={temperatureData}>
@@ -242,11 +249,14 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
         {/* Eating Speed Monitoring */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Eating Speed Trend
-              <span className="text-sm font-normal text-gray-500">kg/hour</span>
-            </CardTitle>
-          </CardHeader>
+            <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Gauge className="w-5 h-5 text-red-500" />
+              <CardTitle>Eating Speed Trend</CardTitle>
+            </div>
+            <span className="text-sm font-normal text-gray-500">kg/hour</span>
+          </div>
+        </CardHeader>
           <CardContent>
             {eatSpeedData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
