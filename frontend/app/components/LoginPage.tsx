@@ -74,13 +74,17 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-green-50 to-blue-50">
       <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-            <Users className="w-8 h-8 text-green-600" />
+        <CardHeader className="text-center space-y-0">
+          <div className="mx-auto flex items-center justify-center space-x-3 mb-2">
+            <img 
+              src="/logo.png" 
+              alt="Cattle Farm Logo" 
+              className="h-48 w-48 object-contain"
+            />
           </div>
-          <div>
+          <div className="pt-0">
             <CardTitle className="text-2xl font-bold text-gray-900">
-              Cattle Farm Management
+              CATTLE Management System
             </CardTitle>
             <CardDescription className="text-gray-600">
               {showForgotPassword ? 'Reset your password' : 'Sign in to your account'}

@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { cattleApi, rfidApi } from '@/lib/api';
 import { Cattle } from '@/types';
 
@@ -86,7 +85,7 @@ export default function RfidAssignmentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="w-[420px] max-w-[90vw] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Assign RFID to Cattle</DialogTitle>
         </DialogHeader>
@@ -108,22 +107,21 @@ export default function RfidAssignmentModal({
 
           <div>
             <Label htmlFor="cow-select">Select Cattle *</Label>
-            <Select 
+            <select
               id="cow-select"
-              value={cowId} 
+              value={cowId}
               onChange={(e) => setCowId(e.target.value)}
               disabled={isLoadingData}
               required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <SelectContent>
-                <SelectValue placeholder={isLoadingData ? "Loading cattle..." : "Choose a cattle"} />
-                {cattleList.map((cattle) => (
-                  <SelectItem key={cattle.cowId} value={cattle.cowId}>
-                    {cattle.name} {cattle.gender ? `(${cattle.gender})` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <option value="">{isLoadingData ? "Loading cattle..." : "Choose a cattle"}</option>
+              {cattleList.map((cattle) => (
+                <option key={cattle.cowId} value={cattle.cowId}>
+                  {cattle.name} {cattle.gender ? `(${cattle.gender})` : ''}
+                </option>
+              ))}
+            </select>
             <p className="text-xs text-gray-500 mt-1">
               Select the cattle to receive this RFID tag
             </p>

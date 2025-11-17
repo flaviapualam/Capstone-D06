@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { SensorReading } from '@/types';
 import { monitoringApi } from '@/lib/api';
-import { ChartNoAxesCombined, Thermometer, Gauge } from 'lucide-react';
+import { ChartNoAxesCombined, Thermometer, Weight } from 'lucide-react';
 
 interface RecordDataSectionProps {
   selectedCowName?: string;
+  selectedCowId?: string; // Add cow ID for API calls
 }
 
 interface ChartDataPoint {
@@ -19,61 +20,104 @@ interface ChartDataPoint {
 }
 
 type TimeRange = 'today' | '2days' | '7days' | '30days' | 'all';
+type DataMode = 'historical' | 'live';
 
-export default function RecordDataSection({ selectedCowName }: RecordDataSectionProps) {
+export default function RecordDataSection({ selectedCowName, selectedCowId }: RecordDataSectionProps) {
   const [sensorData, setSensorData] = useState<SensorReading[]>([]);
+  const [allHistoricalData, setAllHistoricalData] = useState<SensorReading[]>([]); // Store all data for filtering
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>('today');
+  const [dataMode, setDataMode] = useState<DataMode>('historical');
 
   useEffect(() => {
     const fetchSensorData = async () => {
+      setLoading(true);
       try {
-        // TODO: Backend sensor-data endpoint not implemented yet
-        // Uncomment when /api/sensor-data or /api/output-sensor is available
-        // const response = await monitoringApi.getSensorData();
-        // if (response.success && response.data) {
-        //   setSensorData(response.data);
-        // }
-        
-        // For now, set empty data to avoid 404 errors
-        setSensorData([]);
+        // Need cow ID to fetch data
+        if (!selectedCowId) {
+          setSensorData([]);
+          setAllHistoricalData([]);
+          setLoading(false);
+          return;
+        }
+
+        if (dataMode === 'historical') {
+          // Fetch all historical data from /api/cow/{cow_id}/sensor_history
+          const response = await monitoringApi.getSensorHistory(selectedCowId);
+          if (response.success && response.data) {
+            setAllHistoricalData(response.data); // Store all data
+            setSensorData(response.data); // Will be filtered by getFilteredData()
+          } else {
+            console.error('Failed to fetch sensor history:', response.error);
+            setAllHistoricalData([]);
+            setSensorData([]);
+          }
+        } else {
+          // Live/continuous mode - fetch from /api/streaming/cows/{cow_id}
+          const response = await monitoringApi.getLiveData(selectedCowId);
+          if (response.success && response.data) {
+            setSensorData(response.data);
+          } else {
+            console.error('Failed to fetch live data:', response.error);
+            setSensorData([]);
+          }
+        }
       } catch (error) {
         console.error('Error fetching sensor data:', error);
+        setSensorData([]);
+        setAllHistoricalData([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchSensorData();
-    // Disable polling until backend endpoint is ready
-    // const interval = setInterval(fetchSensorData, 30000);
-    // return () => clearInterval(interval);
-  }, []);
+    
+    // Polling for live mode
+    let interval: NodeJS.Timeout | null = null;
+    if (dataMode === 'live' && selectedCowId) {
+      interval = setInterval(fetchSensorData, 5000); // Poll every 5 seconds for live data
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [dataMode, selectedCowId]); // Re-fetch only when mode or cow changes (not timeRange!)
 
-  const getFilteredData = (): SensorReading[] => {
+  // Filter data based on selected time range (only for historical mode)
+  const getFilteredData = () => {
+    // For live mode, always show all current data
+    if (dataMode === 'live') {
+      return sensorData;
+    }
+    
+    // For historical mode, filter from allHistoricalData
+    if (!allHistoricalData || allHistoricalData.length === 0) return [];
+    
     const now = new Date();
-    let startDate = new Date();
-
+    let startDate: Date;
+    
     switch (timeRange) {
       case 'today':
-        startDate.setHours(0, 0, 0, 0);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         break;
       case '2days':
-        startDate.setDate(startDate.getDate() - 2);
+        startDate = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
         break;
       case '7days':
-        startDate.setDate(startDate.getDate() - 7);
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
       case '30days':
-        startDate.setDate(startDate.getDate() - 30);
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
       case 'all':
-        return sensorData;
+      default:
+        return allHistoricalData;
     }
-
-    return sensorData.filter((reading) => {
+    
+    return allHistoricalData.filter(reading => {
       const readingDate = new Date(reading.timeGenerated);
-      return readingDate >= startDate && readingDate <= now;
+      return readingDate >= startDate;
     });
   };
 
@@ -81,23 +125,23 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
     if (data.length === 0) return null;
 
     const temperatures = data.filter(d => d.temperature !== undefined).map(d => d.temperature as number);
-    const eatSpeeds = data.filter(d => d.eatSpeed !== undefined).map(d => d.eatSpeed);
+    const feedWeights = data.filter(d => d.feedWeight !== undefined).map(d => d.feedWeight);
 
     const avgTemp = temperatures.length > 0 ? temperatures.reduce((a, b) => a + b, 0) / temperatures.length : 0;
     const minTemp = temperatures.length > 0 ? Math.min(...temperatures) : 0;
     const maxTemp = temperatures.length > 0 ? Math.max(...temperatures) : 0;
 
-    const avgEatSpeed = eatSpeeds.length > 0 ? eatSpeeds.reduce((a, b) => a + b, 0) / eatSpeeds.length : 0;
+    const avgFeedWeight = feedWeights.length > 0 ? feedWeights.reduce((a, b) => a + b, 0) / feedWeights.length : 0;
 
     return {
       avgTemp: avgTemp.toFixed(1),
       minTemp: minTemp.toFixed(1),
       maxTemp: maxTemp.toFixed(1),
-      avgEatSpeed: avgEatSpeed.toFixed(2),
+      avgFeedWeight: avgFeedWeight.toFixed(2),
     };
   };
 
-  const prepareChartData = (dataType: 'eatSpeed' | 'temperature'): ChartDataPoint[] => {
+  const prepareChartData = (dataType: 'feedWeight' | 'temperature'): ChartDataPoint[] => {
     const filteredData = getFilteredData();
 
     return filteredData
@@ -105,8 +149,8 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
       .map((reading) => {
         let value: number;
 
-        if (dataType === 'eatSpeed') {
-          value = reading.eatSpeed ?? 0;
+        if (dataType === 'feedWeight') {
+          value = reading.feedWeight ?? 0;
         } else if (dataType === 'temperature') {
           value = reading.temperature ?? 0;
         } else {
@@ -126,7 +170,7 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
   };
 
   const filteredData = getFilteredData();
-  const eatSpeedData = prepareChartData('eatSpeed');
+  const feedWeightData = prepareChartData('feedWeight');
   const temperatureData = prepareChartData('temperature');
 
   const timeRangeOptions: { label: string; value: TimeRange }[] = [
@@ -166,20 +210,37 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
             <p className="text-sm text-gray-600 mt-1">Track eating patterns</p>
           </div>
 
-          {/* Time Range Dropdown */}
-          <div className="flex flex-col items-end">
-            <label className="text-sm font-medium text-gray-700 mb-2">Select Time Range</label>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-              className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
-            >
-              <option value="today">Today</option>
-              <option value="2days">Last 2 Days</option>
-              <option value="7days">Last 7 Days</option>
-              <option value="30days">Last 30 Days</option>
-              <option value="all">All Data</option>
-            </select>
+          <div className="flex gap-4 items-end">
+            {/* Data Mode Toggle */}
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-gray-700 mb-2">Data Mode</label>
+              <select
+                value={dataMode}
+                onChange={(e) => setDataMode(e.target.value as DataMode)}
+                className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-900"
+              >
+                <option value="historical">Historical</option>
+                <option value="live">Live Streaming</option>
+              </select>
+            </div>
+
+            {/* Time Range Dropdown (only show in historical mode) */}
+            {dataMode === 'historical' && (
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-gray-700 mb-2">Time Range</label>
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+                >
+                  <option value="today">Today</option>
+                  <option value="2days">Last 2 Days</option>
+                  <option value="7days">Last 7 Days</option>
+                  <option value="30days">Last 30 Days</option>
+                  <option value="all">All Data</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -246,26 +307,26 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
           </CardContent>
         </Card>
 
-        {/* Eating Speed Monitoring */}
+        {/* Feed Weight Monitoring */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Gauge className="w-5 h-5 text-red-500" />
-              <CardTitle>Eating Speed Trend</CardTitle>
+              <Weight className="w-5 h-5 text-orange-500" />
+              <CardTitle>Feed Weight Trend</CardTitle>
             </div>
-            <span className="text-sm font-normal text-gray-500">kg/hour</span>
+            <span className="text-sm font-normal text-gray-500">kg</span>
           </div>
         </CardHeader>
           <CardContent>
-            {eatSpeedData.length > 0 ? (
+            {feedWeightData.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={eatSpeedData}>
+                <LineChart data={feedWeightData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="time"
                     tick={{ fontSize: 12 }}
-                    interval={Math.max(0, Math.floor(eatSpeedData.length / 6))}
+                    interval={Math.max(0, Math.floor(feedWeightData.length / 6))}
                   />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip
@@ -274,17 +335,17 @@ export default function RecordDataSection({ selectedCowName }: RecordDataSection
                       border: '1px solid #ccc',
                       borderRadius: '4px',
                     }}
-                    formatter={(value: any) => value.toFixed(2)}
+                    formatter={(value: any) => `${value.toFixed(2)} kg`}
                   />
                   <Line
                     type="monotone"
                     dataKey="value"
-                    stroke="#a855f7"
+                    stroke="#f97316"
                     dot={false}
                     isAnimationActive={false}
-                    name="Eating Speed"
+                    name="Feed Weight"
                   />
-                  {eatSpeedData
+                  {feedWeightData
                     .filter((d) => d.isAnomaly)
                     .map((point, idx) => (
                       <ReferenceDot

@@ -59,6 +59,7 @@ export interface SensorReading {
   sensorId?: string; // Optional - not always provided by backend
   eatDuration: number;
   eatSpeed: number;
+  feedWeight: number; // Berat pakan tersisa (kg)
   anomalyScore: number;
   temperature?: number;
   location?: string | {

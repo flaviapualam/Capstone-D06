@@ -6,8 +6,9 @@ import { Button } from './ui/button';
 import { Cattle } from '@/types';
 import { cattleApi } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
-import { Pencil, Trash2, MousePointer } from 'lucide-react';
+import { Pencil, Trash2, MousePointer, HandHeart } from 'lucide-react';
 import CattleEditModal from './CattleEditModal';
+import PregnancyModal from './PregnancyModal';
 
 interface ChooseCowSectionProps {
   selectedCowName: string;
@@ -28,7 +29,9 @@ export default function ChooseCowSection({
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPregnancyModal, setShowPregnancyModal] = useState(false);
   const [selectedCowForEdit, setSelectedCowForEdit] = useState<Cattle | null>(null);
+  const [selectedCowForPregnancy, setSelectedCowForPregnancy] = useState<Cattle | null>(null);
 
   const fetchCattle = async () => {
     if (!user?.farmerId) {
@@ -69,6 +72,12 @@ export default function ChooseCowSection({
     e.stopPropagation();
     setSelectedCowForEdit(cow);
     setShowEditModal(true);
+  };
+
+  const handlePregnancyClick = (e: React.MouseEvent, cow: Cattle) => {
+    e.stopPropagation();
+    setSelectedCowForPregnancy(cow);
+    setShowPregnancyModal(true);
   };
 
   const handleDeleteClick = async (e: React.MouseEvent, cow: Cattle) => {
@@ -173,6 +182,15 @@ export default function ChooseCowSection({
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={(e) => handlePregnancyClick(e, cow)}
+                      className="flex-1 flex items-center justify-center gap-2 text-pink-600 hover:text-pink-700 border-pink-200 hover:border-pink-300"
+                    >
+                      <HandHeart className="w-4 h-4" />
+                      Pregnancy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={(e) => handleDeleteClick(e, cow)}
                       className="flex items-center justify-center gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
                     >
@@ -203,6 +221,18 @@ export default function ChooseCowSection({
           setSelectedCowForEdit(null);
         }}
         onCattleUpdated={handleCattleUpdated}
+        onSuccess={onSuccess}
+      />
+
+      <PregnancyModal
+        isOpen={showPregnancyModal}
+        cowId={selectedCowForPregnancy?.cowId || ''}
+        cowName={selectedCowForPregnancy?.name || ''}
+        onClose={() => {
+          setShowPregnancyModal(false);
+          setSelectedCowForPregnancy(null);
+        }}
+        onPregnancyRecorded={() => fetchCattle()}
         onSuccess={onSuccess}
       />
     </>

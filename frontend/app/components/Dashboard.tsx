@@ -48,7 +48,7 @@ export default function Dashboard({ user }: DashboardProps) {
                 className="h-24 w-24"
               />
               <h1 className="text-xl font-semibold text-gray-900">
-                Cattle Management System
+                CATTLE Management System
               </h1>
             </div>
             <div className="flex items-center space-x-4">

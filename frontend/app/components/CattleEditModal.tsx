@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem } from './ui/select';
 import { Cattle } from '@/types';
 import { cattleApi } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
@@ -94,7 +93,7 @@ export default function CattleEditModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="w-[420px] max-w-[90vw] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Cattle</DialogTitle>
         </DialogHeader>
@@ -125,17 +124,16 @@ export default function CattleEditModal({
 
           <div>
             <Label htmlFor="gender">Gender</Label>
-            <Select
+            <select
               id="gender"
               value={formData.gender}
               onChange={(e: ChangeEvent<HTMLSelectElement>) => handleInputChange('gender', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <SelectContent>
-                <SelectItem value="">Select gender (optional)</SelectItem>
-                <SelectItem value="FEMALE">Female</SelectItem>
-                <SelectItem value="MALE">Male</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="">Select gender (optional)</option>
+              <option value="FEMALE">Female</option>
+              <option value="MALE">Male</option>
+            </select>
             <p className="text-xs text-gray-500 mt-1">Optional - Leave empty if unknown</p>
           </div>
 

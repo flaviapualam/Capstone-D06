@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent } from './ui/card';
-import { Stethoscope } from 'lucide-react';
+import { Activity } from 'lucide-react';
 
 export default function MonitoringSection() {
   // Simplified version - backend doesn't support status aggregation endpoint yet
@@ -10,7 +10,7 @@ export default function MonitoringSection() {
   return (
     <section className="space-y-6">
       <div className="flex items-center space-x-2">
-        <Stethoscope className="w-6 h-6 text-blue-600" />
+        <Activity className="w-6 h-6 text-blue-600" />
         <h2 className="text-2xl font-bold">Cattle Monitoring</h2>
       </div>
 
