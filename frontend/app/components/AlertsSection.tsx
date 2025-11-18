@@ -20,7 +20,7 @@ export default function AlertsSection() {
         onClick={() => setIsOpen(!isOpen)}
         title="Alerts feature coming soon"
       >
-        <Bell className="w-5 h-5 text-gray-400" />
+        <Bell className="w-5 h-5 text-yellow-800" />
       </Button>
 
       {isOpen && (

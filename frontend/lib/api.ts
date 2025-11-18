@@ -2,7 +2,7 @@ import { ApiResponse, User, LoginCredentials, RegisterData, Cattle, CattleRegist
 
 // Base API configuration
 // Direct backend URL (cross-origin request with credentials)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://103.181.143.162:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://project-capstone.my.id/api';
 
 console.log('API Base URL:', API_BASE_URL);
 
@@ -70,13 +70,13 @@ async function apiCall<T>(
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<ApiResponse<{ user: User }>> => {
     // POST to cookie-based login (backend v3 mounted under /api)
-    await apiCall<any>('/api/auth/login', {
+    await apiCall<any>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
 
     // After cookie set, fetch current farmer data from /api/auth/me
-    const meResp = await apiCall<any>('/api/auth/me', { method: 'GET' });
+    const meResp = await apiCall<any>('/auth/me', { method: 'GET' });
     if (meResp.success && meResp.data) {
       const farmer = meResp.data;
       const user: User = {
@@ -94,7 +94,7 @@ export const authApi = {
   },
 
   register: async (userData: RegisterData): Promise<ApiResponse<{ user: User }>> => {
-    const response = await apiCall<any>('/api/auth/register', {
+    const response = await apiCall<any>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({
         name: userData.name,
@@ -121,7 +121,7 @@ export const authApi = {
   },
 
   me: async (): Promise<ApiResponse<{ user: User }>> => {
-    const meResp = await apiCall<any>('/api/auth/me', { method: 'GET' });
+    const meResp = await apiCall<any>('/auth/me', { method: 'GET' });
     if (meResp.success && meResp.data) {
       const farmer = meResp.data;
       const user: User = {
@@ -157,7 +157,7 @@ export const authApi = {
 // Cattle API (maps to /api/cow endpoints on backend v3)
 export const cattleApi = {
   getAll: async (): Promise<ApiResponse<Cattle[]>> => {
-    const response = await apiCall<any[]>('/api/cow/', { method: 'GET' });
+    const response = await apiCall<any[]>('/cow/', { method: 'GET' });
     if (response.success && response.data) {
       const cattle: Cattle[] = response.data.map((cow: any) => {
         // Backend returns date_of_birth; compute age if possible
@@ -196,7 +196,7 @@ export const cattleApi = {
       payload.gender = cattleData.gender;
     }
 
-    const response = await apiCall<any>('/api/cow/', {
+    const response = await apiCall<any>('/cow/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -239,7 +239,7 @@ export const cattleApi = {
     if (cattleData.date_of_birth) payload.date_of_birth = cattleData.date_of_birth;
     if (cattleData.gender) payload.gender = cattleData.gender;
 
-    const response = await apiCall<any>(`/api/cow/${cowId}`, {
+    const response = await apiCall<any>(`/cow/${cowId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -276,14 +276,14 @@ export const cattleApi = {
   },
 
   delete: async (cowId: string): Promise<ApiResponse<{ message: string }>> => {
-    return apiCall<{ message: string }>(`/api/cow/${cowId}`, { method: 'DELETE' });
+    return apiCall<{ message: string }>(`/cow/${cowId}`, { method: 'DELETE' });
   },
 };
 
 // Keep sensor/monitoring stubs unchanged but exported for compatibility
 export const sensorApi = {
   getAll: async (): Promise<ApiResponse<Sensor[]>> => {
-    const response = await apiCall<any[]>('/api/sensor', { method: 'GET' });
+    const response = await apiCall<any[]>('/sensor', { method: 'GET' });
     if (response.success && response.data) {
       const sensors: Sensor[] = response.data.map((sensor: any) => ({
         sensorId: sensor.sensor_id,
@@ -308,6 +308,7 @@ export const monitoringApi = {
         cowId: reading.cow_id?.toString() || reading.cowId || reading.rfid_id || '',
         eatDuration: reading.eat_duration || reading.eatDuration || 0,
         eatSpeed: reading.eat_speed || reading.eatSpeed || 0,
+        feedWeight: reading.feed_weight || reading.feedWeight || 0,
         anomalyScore: reading.anomaly_score || reading.anomalyScore || 0,
         temperature: reading.temperature_c || reading.temperature || 0,
         location: reading.location || reading.ip || '',
@@ -316,6 +317,158 @@ export const monitoringApi = {
     }
     return { success: false, error: response.error || 'Failed to fetch sensor data' };
   },
+
+  // Historical data - fetch with different time ranges
+  getSensorHistory: async (cowId: string, timeRange: string = 'all'): Promise<ApiResponse<SensorReading[]>> => {
+    // Convert timeRange to hours parameter (backend max is 24 hours)
+    const hoursMap: Record<string, number> = {
+      'today': 24,
+      '2days': 24,  // Backend limit: max 24 hours
+      '7days': 24,  // Backend limit: max 24 hours
+      '30days': 24, // Backend limit: max 24 hours
+      'all': 24     // Backend limit: max 24 hours
+    };
+    
+    const hours = hoursMap[timeRange] || 24;
+    const url = `/cow/${cowId}/sensor_history?hours=${hours}`;
+    
+    console.log('Calling sensor history API:', url);
+    
+    const response = await apiCall<any[]>(url, { 
+      method: 'GET' 
+    });
+    
+    console.log('Sensor history API response:', response);
+    
+    if (response.success && response.data) {
+      const sensorReadings: SensorReading[] = response.data.map((reading: any) => ({
+        timeGenerated: reading.timestamp || reading.time_generated || new Date().toISOString(),
+        cowId: reading.cow_id?.toString() || cowId,
+        eatDuration: reading.eat_duration || 0,
+        eatSpeed: reading.eat_speed || 0,
+        feedWeight: reading.feed_weight || reading.weight || 0,
+        anomalyScore: reading.anomaly_score || 0,
+        temperature: reading.temperature || reading.temperature_c || 0,
+        location: reading.location || '',
+        isAnomaly: reading.is_anomaly || false,
+      }));
+      return { success: true, data: sensorReadings };
+    }
+    return { success: false, error: response.error || 'Failed to fetch sensor history' };
+  },
+
+  // Live streaming with SSE - returns EventSource for real-time updates
+  createLiveStream: (
+    cowId: string, 
+    onData: (reading: SensorReading) => void, 
+    onError?: (error: string) => void,
+    onOpen?: () => void
+  ): EventSource => {
+    const url = `${API_BASE_URL}/streaming/cows/${cowId}`;
+    console.log('Creating SSE connection:', url);
+    
+    const eventSource = new EventSource(url, { withCredentials: true });
+    
+    eventSource.onopen = () => {
+      console.log('✅ SSE connection established');
+      onOpen?.();
+    };
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('SSE data received:', data);
+        
+        // Map backend data to SensorReading
+        const reading: SensorReading = {
+          timeGenerated: data.timestamp || data.time_generated || new Date().toISOString(),
+          cowId: data.cow_id?.toString() || cowId,
+          eatDuration: data.eat_duration || 0,
+          eatSpeed: data.eat_speed || 0,
+          feedWeight: data.feed_weight || data.weight || 0,
+          anomalyScore: data.anomaly_score || 0,
+          temperature: data.temperature || data.temperature_c || 0,
+          location: data.location || data.ip || '',
+          isAnomaly: data.is_anomaly || false,
+        };
+        
+        onData(reading);
+      } catch (error) {
+        console.error('Error parsing SSE data:', error);
+        onError?.('Failed to parse sensor data');
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('❌ SSE connection error:', error);
+      const errorMsg = eventSource.readyState === EventSource.CLOSED 
+        ? 'Connection closed by server' 
+        : 'Failed to connect to sensor stream';
+      onError?.(errorMsg);
+    };
+    
+    return eventSource; // Return EventSource for cleanup
+  },
+};
+
+// RFID API (maps to /api/rfid endpoints on backend v3)
+export const rfidApi = {
+  assign: async (rfidId: string, cowId: string): Promise<ApiResponse<any>> => {
+    return apiCall<any>('/rfid/assign', {
+      method: 'POST',
+      body: JSON.stringify({
+        rfid_id: rfidId,
+        cow_id: cowId,
+      }),
+    });
+  },
+};
+
+// Pregnancy API (maps to /api/cow/{cow_id}/pregnancies endpoints)
+export const pregnancyApi = {
+  getAll: async (cowId: string): Promise<ApiResponse<any[]>> => {
+    // Get pregnancies from the cow data itself (GET /api/cow/ returns pregnancies array)
+    const response = await apiCall<any[]>('/cow/', {
+      method: 'GET',
+    });
+    
+    if (response.success && response.data) {
+      // Find the specific cow and return its pregnancies
+      const cow = response.data.find((c: any) => c.cow_id === cowId);
+      if (cow && cow.pregnancies) {
+        return { success: true, data: cow.pregnancies };
+      }
+      return { success: true, data: [] }; // No pregnancies found
+    }
+    
+    return { success: false, error: response.error || 'Failed to fetch pregnancies' };
+  },
+
+  create: async (cowId: string, pregnancyData: {
+    time_start: string;
+    expected_due_date?: string;
+  }): Promise<ApiResponse<any>> => {
+    return apiCall<any>(`/cow/${cowId}/pregnancies`, {
+      method: 'POST',
+      body: JSON.stringify(pregnancyData),
+    });
+  },
+
+  update: async (cowId: string, pregnancyId: number, pregnancyData: {
+    time_end?: string;
+    status?: string;
+  }): Promise<ApiResponse<any>> => {
+    return apiCall<any>(`/cow/${cowId}/pregnancies/${pregnancyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(pregnancyData),
+    });
+  },
+
+  delete: async (cowId: string, pregnancyId: number): Promise<ApiResponse<any>> => {
+    return apiCall<any>(`/cow/${cowId}/pregnancies/${pregnancyId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export const api = {
@@ -323,6 +476,8 @@ export const api = {
   cattle: cattleApi,
   sensor: sensorApi,
   monitoring: monitoringApi,
+  rfid: rfidApi,
+  pregnancy: pregnancyApi,
 };
 
 export default api;

@@ -47,7 +47,7 @@ export const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
     <div
       ref={ref}
       className={cn(
-        "grid w-full max-w-lg gap-4 border bg-white p-6 shadow-lg rounded-lg",
+        "grid w-full gap-4 border bg-white p-6 shadow-lg rounded-lg",
         className
       )}
       {...props}

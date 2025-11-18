@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from './ui/button';
-import { LogOut, Plus } from 'lucide-react';
+import { LogOut, Plus, Tag, Menu, X } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { User } from '@/types';
 import RecordDataSection from './RecordDataSection';
@@ -10,6 +10,7 @@ import ChooseCowSection from './ChooseCowSection';
 import MonitoringSection from './MonitoringSection';
 import AlertsSection from './AlertsSection';
 import CattleRegistrationModal from './CattleRegistrationModal';
+import RfidAssignmentModal from './RfidAssignmentModal';
 import Toast, { useToast } from './Toast';
 
 interface DashboardProps {
@@ -18,8 +19,11 @@ interface DashboardProps {
 
 export default function Dashboard({ user }: DashboardProps) {
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+  const [showRfidAssignmentModal, setShowRfidAssignmentModal] = useState(false);
   const [selectedCowName, setSelectedCowName] = useState<string>('');
+  const [selectedCowId, setSelectedCowId] = useState<string | undefined>(undefined);
   const [refreshCattle, setRefreshCattle] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
   const { toasts, showToast, removeToast } = useToast();
 
@@ -28,43 +32,127 @@ export default function Dashboard({ user }: DashboardProps) {
     setShowRegistrationModal(false);
   };
 
+  const handleRfidAssigned = () => {
+    setRefreshCattle(!refreshCattle);
+    setShowRfidAssignmentModal(false);
+  };
+
+  const handleCowSelect = (cowName: string, cowId?: string) => {
+    setSelectedCowName(cowName);
+    setSelectedCowId(cowId);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white shadow-sm border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-semibold text-gray-900">
-                Cattle Farm Management System
+            {/* Logo + Title */}
+            <div className="flex items-center space-x-0">
+              <img 
+                src="/logo.png" 
+                alt="Cattle Farm Logo" 
+                className="h-24 w-24"
+              />
+              <h1 className="text-xl font-semibold text-gray-900 hidden md:block">
+                CATTLE Management System
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {user.name}</span>
+            
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center space-x-3">
+              <span className="text-sm text-gray-600 mr-2">Welcome, {user.name}</span>
               
-              {/* Alerts Section in Navbar */}
+              {/* Alerts Section */}
               <AlertsSection />
               
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowRegistrationModal(true)}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 bg-white text-emerald-600 hover:bg-emerald-50 border-emerald-200"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Cattle</span>
+                <span>Add Cow</span>
               </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowRfidAssignmentModal(true)}
+                className="flex items-center space-x-2 bg-white text-emerald-600 hover:bg-emerald-50 border-emerald-200"
+              >
+                <Tag className="w-4 h-4" />
+                <span>Assign RFID</span>
+              </Button>
+              
               <Button
                 variant="outline"
                 size="sm"
                 onClick={logout}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 bg-white text-red-600 hover:bg-red-50 border-red-200"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Logout</span>
               </Button>
             </div>
+            
+            {/* Mobile Menu Button + Alerts */}
+            <div className="flex md:hidden items-center space-x-2">
+              <AlertsSection />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </Button>
+            </div>
           </div>
+          
+          {/* Mobile Dropdown Menu */}
+          {mobileMenuOpen && (
+            <div className="md:hidden border-t border-gray-200 py-4 space-y-2">
+              <div className="px-4 py-2 text-sm text-gray-600 border-b border-gray-100">
+                Welcome, <span className="font-medium">{user.name}</span>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setShowRegistrationModal(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-4 py-3 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                <span className="font-medium">Add Cow</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowRfidAssignmentModal(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-4 py-3 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
+              >
+                <Tag className="w-5 h-5" />
+                <span className="font-medium">Assign RFID</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  logout();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center space-x-3 px-4 py-3 bg-white text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="font-medium">Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -82,19 +170,22 @@ export default function Dashboard({ user }: DashboardProps) {
           </div>
           
           {/* Monitoring Section */}
-          <MonitoringSection />
-          
+          {/* <MonitoringSection /> */}
+
           {/* Choose Cow Section */}
           <ChooseCowSection 
             selectedCowName={selectedCowName}
-            onCowSelect={setSelectedCowName}
+            onCowSelect={handleCowSelect}
             onCattleUpdated={handleCattleRegistered}
             onSuccess={showToast}
             refreshTrigger={refreshCattle}
           />
           
           {/* Record Data Section */}
-          <RecordDataSection selectedCowName={selectedCowName} />
+          <RecordDataSection 
+            selectedCowName={selectedCowName} 
+            selectedCowId={selectedCowId}
+          />
         </div>
       </main>
 
@@ -106,17 +197,17 @@ export default function Dashboard({ user }: DashboardProps) {
         onSuccess={showToast}
       />
 
+      {/* RFID Assignment Modal */}
+      <RfidAssignmentModal
+        isOpen={showRfidAssignmentModal}
+        onClose={() => setShowRfidAssignmentModal(false)}
+        onRfidAssigned={handleRfidAssigned}
+        onSuccess={showToast}
+        refreshTrigger={refreshCattle}
+      />
+
       {/* Toasts */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            message={toast.message}
-            type={toast.type}
-            onClose={() => removeToast(toast.id)}
-          />
-        ))}
-      </div>
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Cattle } from '@/types';
 import { cattleApi } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
@@ -87,7 +86,7 @@ export default function CattleRegistrationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="w-[420px] max-w-[90vw] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Register New Cattle</DialogTitle>
         </DialogHeader>
@@ -101,6 +100,7 @@ export default function CattleRegistrationModal({
               onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('name', e.target.value)}
               placeholder="Enter cattle name"
               required
+              className="bg-white"
             />
           </div>
 
@@ -112,31 +112,31 @@ export default function CattleRegistrationModal({
               value={formData.date_of_birth}
               onChange={(e: ChangeEvent<HTMLInputElement>) => handleInputChange('date_of_birth', e.target.value)}
               placeholder="Select birth date"
+              className="bg-white"
             />
             <p className="text-xs text-gray-500 mt-1">Optional - Leave empty if unknown</p>
           </div>
 
           <div>
             <Label htmlFor="gender">Gender</Label>
-            <Select
+            <select
               id="gender"
               value={formData.gender}
               onChange={(e: ChangeEvent<HTMLSelectElement>) => handleInputChange('gender', e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
-              <SelectContent>
-                <SelectItem value="">Select gender (optional)</SelectItem>
-                <SelectItem value="FEMALE">Female</SelectItem>
-                <SelectItem value="MALE">Male</SelectItem>
-              </SelectContent>
-            </Select>
+              <option value="">Select gender (optional)</option>
+              <option value="FEMALE">Female</option>
+              <option value="MALE">Male</option>
+            </select>
             <p className="text-xs text-gray-500 mt-1">Optional - Leave empty if unknown</p>
           </div>
 
           <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="bg-white hover:bg-gray-100 text-gray-700">
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
               {isLoading ? 'Registering...' : 'Register Cattle'}
             </Button>
           </div>

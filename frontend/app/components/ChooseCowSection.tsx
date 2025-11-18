@@ -6,12 +6,13 @@ import { Button } from './ui/button';
 import { Cattle } from '@/types';
 import { cattleApi } from '@/lib/api';
 import { useAuth } from '@/hooks/use-auth';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, MousePointer, HandHeart } from 'lucide-react';
 import CattleEditModal from './CattleEditModal';
+import PregnancyModal from './PregnancyModal';
 
 interface ChooseCowSectionProps {
   selectedCowName: string;
-  onCowSelect: (cowName: string) => void;
+  onCowSelect: (cowName: string, cowId?: string) => void;
   onCattleUpdated?: () => void;
   onSuccess?: (message: string) => void;
   refreshTrigger?: boolean;
@@ -28,7 +29,9 @@ export default function ChooseCowSection({
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPregnancyModal, setShowPregnancyModal] = useState(false);
   const [selectedCowForEdit, setSelectedCowForEdit] = useState<Cattle | null>(null);
+  const [selectedCowForPregnancy, setSelectedCowForPregnancy] = useState<Cattle | null>(null);
 
   const fetchCattle = async () => {
     if (!user?.farmerId) {
@@ -37,12 +40,12 @@ export default function ChooseCowSection({
     }
 
     try {
-      const response = await cattleApi.getAll(user.farmerId);
+      const response = await cattleApi.getAll();
       if (response.success && response.data) {
         setCattle(response.data);
         // Auto-select first cattle if none selected
         if (!selectedCowName && response.data.length > 0) {
-          onCowSelect(response.data[0].name);
+          onCowSelect(response.data[0].name, response.data[0].cowId);
         }
       }
     } catch (error) {
@@ -71,6 +74,12 @@ export default function ChooseCowSection({
     setShowEditModal(true);
   };
 
+  const handlePregnancyClick = (e: React.MouseEvent, cow: Cattle) => {
+    e.stopPropagation();
+    setSelectedCowForPregnancy(cow);
+    setShowPregnancyModal(true);
+  };
+
   const handleDeleteClick = async (e: React.MouseEvent, cow: Cattle) => {
     e.stopPropagation();
     const confirmed = window.confirm(`Are you sure you want to delete "${cow.name}"?`);
@@ -82,7 +91,7 @@ export default function ChooseCowSection({
         setCattle(prev => prev.filter(c => c.cowId !== cow.cowId));
         onSuccess?.(`✅ Cattle "${cow.name}" deleted successfully!`);
         if (selectedCowName === cow.name) {
-          onCowSelect('');
+          onCowSelect('', undefined);
         }
       } else {
         onSuccess?.(`❌ Error: ${response.error || 'Failed to delete cattle'}`);
@@ -98,7 +107,10 @@ export default function ChooseCowSection({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Choose Cow</CardTitle>
+          <div className="flex items-center space-x-2">
+            <MousePointer className="w-6 h-6 text-amber-700" />
+            <CardTitle>Choose Cow</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">Loading cattle...</div>
@@ -111,7 +123,10 @@ export default function ChooseCowSection({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Choose Cow</CardTitle>
+          <div className="flex items-center space-x-2">
+            <MousePointer className="w-6 h-6 text-amber-700" />
+            <CardTitle>Choose Cow</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-gray-500">
@@ -126,7 +141,10 @@ export default function ChooseCowSection({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Choose Cow</CardTitle>
+          <div className="flex items-center space-x-2">
+            <MousePointer className="w-6 h-6 text-amber-700" />
+            <CardTitle>Choose Cow</CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -138,7 +156,7 @@ export default function ChooseCowSection({
                     ? 'border-blue-500 ring-2 ring-blue-200 bg-blue-50' 
                     : 'border-gray-200 hover:border-gray-300 bg-white'
                 }`}
-                onClick={() => onCowSelect(cow.name)}
+                onClick={() => onCowSelect(cow.name, cow.cowId)}
               >
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-3">
@@ -149,9 +167,6 @@ export default function ChooseCowSection({
                     <p className="text-sm text-gray-600">
                       <span className="font-medium">Age:</span> {cow.age} years
                     </p>
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Farmer ID:</span> {cow.farmerId.substring(0, 8)}...
-                    </p>
                   </div>
 
                   <div className="flex gap-2">
@@ -159,7 +174,7 @@ export default function ChooseCowSection({
                       size="sm"
                       variant="outline"
                       onClick={(e) => handleEditClick(e, cow)}
-                      className="flex-1 flex items-center justify-center gap-2"
+                      className="flex-1 flex items-center justify-center gap-2 bg-white hover:bg-blue-50 text-blue-600 border-blue-200"
                     >
                       <Pencil className="w-4 h-4" />
                       Edit
@@ -167,8 +182,17 @@ export default function ChooseCowSection({
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={(e) => handlePregnancyClick(e, cow)}
+                      className="flex-1 flex items-center justify-center gap-2 bg-white text-pink-600 hover:bg-pink-50 border-pink-200"
+                    >
+                      <HandHeart className="w-4 h-4" />
+                      Pregnancy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={(e) => handleDeleteClick(e, cow)}
-                      className="flex items-center justify-center gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                      className="flex items-center justify-center gap-2 bg-white text-red-600 hover:bg-red-50 border-red-200"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete
@@ -197,6 +221,18 @@ export default function ChooseCowSection({
           setSelectedCowForEdit(null);
         }}
         onCattleUpdated={handleCattleUpdated}
+        onSuccess={onSuccess}
+      />
+
+      <PregnancyModal
+        isOpen={showPregnancyModal}
+        cowId={selectedCowForPregnancy?.cowId || ''}
+        cowName={selectedCowForPregnancy?.name || ''}
+        onClose={() => {
+          setShowPregnancyModal(false);
+          setSelectedCowForPregnancy(null);
+        }}
+        onPregnancyRecorded={() => fetchCattle()}
         onSuccess={onSuccess}
       />
     </>
