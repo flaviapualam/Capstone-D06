@@ -281,7 +281,7 @@ export default function PregnancyModal({
                           onClick={() => handleEdit(pregnancy)}
                           variant="outline"
                           size="sm"
-                          className="text-blue-600 hover:bg-blue-50"
+                          className="bg-white text-blue-600 hover:bg-blue-50 border-blue-200"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -289,7 +289,7 @@ export default function PregnancyModal({
                           onClick={() => handleDelete(pregnancy.pregnancy_id)}
                           variant="outline"
                           size="sm"
-                          className="text-red-600 hover:bg-red-50"
+                          className="bg-white text-red-600 hover:bg-red-50 border-red-200"
                           disabled={isLoading}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -319,7 +319,7 @@ export default function PregnancyModal({
             )}
 
             <div className="flex justify-end">
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={onClose} className="bg-white hover:bg-gray-100 text-gray-700">
                 Close
               </Button>
             </div>
@@ -355,6 +355,7 @@ export default function PregnancyModal({
                     value={formData.time_start}
                     onChange={handleChange}
                     required
+                    className="bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     When did the pregnancy start?
@@ -369,6 +370,7 @@ export default function PregnancyModal({
                     type="date"
                     value={formData.expected_due_date}
                     onChange={handleChange}
+                    className="bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Estimated delivery date (typically 9 months from start)
@@ -385,6 +387,7 @@ export default function PregnancyModal({
                     type="date"
                     value={formData.time_end}
                     onChange={handleChange}
+                    className="bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {formData.time_end 
@@ -414,6 +417,7 @@ export default function PregnancyModal({
                     type="date"
                     value={formData.time_end}
                     onChange={handleChange}
+                    className="bg-white"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {formData.time_end 
@@ -443,14 +447,14 @@ export default function PregnancyModal({
                   setEditingPregnancy(null);
                 }} 
                 disabled={isLoading}
+                className="bg-white hover:bg-gray-100 text-gray-700"
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 disabled={isLoading}
-                className="text-green-600 hover:bg-green-50 border-green-600"
-                variant="outline"
+                className="bg-pink-600 hover:bg-pink-700 text-white"
               >
                 {isLoading ? 'Saving...' : editingPregnancy ? 'Update Pregnancy' : 'Record Pregnancy'}
               </Button>

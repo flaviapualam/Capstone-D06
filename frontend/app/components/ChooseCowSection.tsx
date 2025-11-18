@@ -174,7 +174,7 @@ export default function ChooseCowSection({
                       size="sm"
                       variant="outline"
                       onClick={(e) => handleEditClick(e, cow)}
-                      className="flex-1 flex items-center justify-center gap-2"
+                      className="flex-1 flex items-center justify-center gap-2 bg-white hover:bg-blue-50 text-blue-600 border-blue-200"
                     >
                       <Pencil className="w-4 h-4" />
                       Edit
@@ -183,7 +183,7 @@ export default function ChooseCowSection({
                       size="sm"
                       variant="outline"
                       onClick={(e) => handlePregnancyClick(e, cow)}
-                      className="flex-1 flex items-center justify-center gap-2 text-pink-600 hover:text-pink-700 border-pink-200 hover:border-pink-300"
+                      className="flex-1 flex items-center justify-center gap-2 bg-white text-pink-600 hover:bg-pink-50 border-pink-200"
                     >
                       <HandHeart className="w-4 h-4" />
                       Pregnancy
@@ -192,7 +192,7 @@ export default function ChooseCowSection({
                       size="sm"
                       variant="outline"
                       onClick={(e) => handleDeleteClick(e, cow)}
-                      className="flex items-center justify-center gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                      className="flex items-center justify-center gap-2 bg-white text-red-600 hover:bg-red-50 border-red-200"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete

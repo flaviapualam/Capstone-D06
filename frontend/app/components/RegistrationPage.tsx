@@ -100,7 +100,7 @@ export default function RegistrationPage({ onBackToLogin }: RegistrationPageProp
                 value={formData.name}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('name', e.target.value)}
                 required
-                className="w-full"
+                className="w-full bg-white"
               />
             </div>
             <div className="space-y-2">
@@ -112,7 +112,7 @@ export default function RegistrationPage({ onBackToLogin }: RegistrationPageProp
                 value={formData.email}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('email', e.target.value)}
                 required
-                className="w-full"
+                className="w-full bg-white"
               />
             </div>
             <div className="space-y-2">
@@ -124,7 +124,7 @@ export default function RegistrationPage({ onBackToLogin }: RegistrationPageProp
                 value={formData.password}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('password', e.target.value)}
                 required
-                className="w-full"
+                className="w-full bg-white"
                 minLength={6}
               />
             </div>
@@ -137,7 +137,7 @@ export default function RegistrationPage({ onBackToLogin }: RegistrationPageProp
                 value={formData.confirmPassword}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('confirmPassword', e.target.value)}
                 required
-                className="w-full"
+                className="w-full bg-white"
                 minLength={6}
               />
             </div>

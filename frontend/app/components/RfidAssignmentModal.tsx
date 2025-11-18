@@ -99,6 +99,7 @@ export default function RfidAssignmentModal({
               onChange={(e: ChangeEvent<HTMLInputElement>) => setRfidId(e.target.value)}
               placeholder="Enter RFID tag ID (e.g., RFID-001)"
               required
+              className="bg-white"
             />
             <p className="text-xs text-gray-500 mt-1">
               Enter the RFID tag ID from your device
@@ -113,7 +114,7 @@ export default function RfidAssignmentModal({
               onChange={(e) => setCowId(e.target.value)}
               disabled={isLoadingData}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               <option value="">{isLoadingData ? "Loading cattle..." : "Choose a cattle"}</option>
               {cattleList.map((cattle) => (
@@ -135,10 +136,10 @@ export default function RfidAssignmentModal({
           </div>
 
           <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} className="bg-white hover:bg-gray-100 text-gray-700">
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || isLoadingData}>
+            <Button type="submit" disabled={isLoading || isLoadingData} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               {isLoading ? 'Assigning...' : 'Assign RFID'}
             </Button>
           </div>

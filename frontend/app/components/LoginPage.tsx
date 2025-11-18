@@ -102,7 +102,7 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full"
+                className="w-full bg-white"
               />
             </div>
             {!showForgotPassword && (
@@ -115,7 +115,7 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full"
+                  className="w-full bg-white"
                 />
               </div>
             )}
@@ -159,10 +159,10 @@ export default function LoginPage({ onShowRegistration }: LoginPageProps) {
               </button>
             )}
           </div>
-          <div className="mt-4 p-3 bg-gray-50 rounded text-sm text-gray-600">
-            <strong>Demo credentials:</strong><br />
-            Email: admin@cattle-monitor.com<br />
-            Password: password
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+            <strong className="text-blue-900">Demo credentials:</strong><br />
+            <span className="text-blue-800">Email: admin@cattle-monitor.com</span><br />
+            <span className="text-blue-800">Password: password</span>
           </div>
         </CardContent>
       </Card>
