@@ -1,0 +1,28 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "103.181.143.162",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Capstone_d06",
+            "group": "VPS-Portofolio",
+            "database": "capstone_d06",
+            "username": "postgres",
+            "password": "12345678"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Capstone_d06",
+            "group": "Localhost",
+            "database": "capstone_d06",
+            "username": "postgres",
+            "password": "12345678"
+        }
+    ]
+}
