@@ -21,7 +21,7 @@ LONGITUDE = 110.370
 
 class CowFeedSimulator:
     def __init__(self):
-        self.feed_weight = 0.0 # Sekarang dalam GRAM
+        self.feed_weight = 0.0 # Gram
         self.temperature = 30.0 
         
         self.device_ip = self._get_local_ip()
@@ -29,7 +29,7 @@ class CowFeedSimulator:
 
         self.is_eating = False
         self.state_end_time = datetime.now()
-        self.current_consume_rate = 0 # Gram per jam
+        self.current_base_rate = 0 # Rate dasar rata-rata (Gram/jam)
         
         self.last_scheduled_hour = -1
         self.last_weather_update = datetime.min 
@@ -61,9 +61,8 @@ class CowFeedSimulator:
         except Exception:
             return False, None
 
-    def _get_random_consume_rate(self):
-        # UBAH KE GRAM: 5 kg = 5000 gram
-        # Varians 2 kg = 2000 gram
+    def _get_random_base_rate(self):
+        # Rate dasar: 5000 gram/jam dengan varians +/- 2000g
         base_rate = 5000.0
         variance = random.uniform(-2000.0, 2000.0)
         return base_rate + variance
@@ -73,7 +72,6 @@ class CowFeedSimulator:
 
     def refill_feed(self, amount_gram):
         self.feed_weight += amount_gram
-        # Print satuan gram
         print(f"\n[INFO] Pakan ditambahkan {amount_gram:.2f} gram. Total: {self.feed_weight:.2f} gram")
 
     def check_schedule_and_weather(self):
@@ -82,8 +80,7 @@ class CowFeedSimulator:
         if now.hour != self.last_scheduled_hour:
             if now.hour == 7 or now.hour == 13:
                 print(f"\n[JADWAL] Refill otomatis pukul {now.hour}:00.")
-                # UBAH KE GRAM: 10 kg = 10000 gram
-                self.refill_feed(10000.0) 
+                self.refill_feed(10000.0) # 10kg = 10000g
                 self.last_scheduled_hour = now.hour
 
         time_diff = now - self.last_weather_update
@@ -103,18 +100,39 @@ class CowFeedSimulator:
             self.is_eating = not self.is_eating
             if self.is_eating:
                 self.state_end_time = self._get_duration(15, 30)
-                self.current_consume_rate = self._get_random_consume_rate()
-                # Print satuan gram/jam
-                print(f"\n[SAPI] MAKAN. Rate: {self.current_consume_rate:.2f} g/jam. Sampai: {self.state_end_time.strftime('%H:%M:%S')}")
+                self.current_base_rate = self._get_random_base_rate()
+                print(f"\n[SAPI] MAKAN. Base Rate Sesi Ini: {self.current_base_rate:.2f} g/jam.")
             else:
                 self.state_end_time = self._get_duration(2, 10)
                 print(f"\n[SAPI] ISTIRAHAT. Sampai: {self.state_end_time.strftime('%H:%M:%S')}")
 
     def process_consumption(self, interval_seconds):
+        """
+        Simulasi konsumsi yang berubah SETIAP DETIK di dalam interval.
+        """
         if self.is_eating and self.feed_weight > 0:
-            loss_per_sec = self.current_consume_rate / 3600 
-            consumed = loss_per_sec * interval_seconds
-            self.feed_weight -= consumed
+            total_consumed = 0.0
+            
+            # Kita loop per detik (meskipun interval 2 detik, kita hitung detik 1 dan detik 2 secara terpisah)
+            # int(interval_seconds) memastikan kita loop sesuai durasi sleep
+            for _ in range(int(interval_seconds)):
+                
+                # Faktor pengali acak (Jitter) per detik
+                # 0.0 = Sapi berhenti sebentar
+                # 1.0 = Kecepatan normal rata-rata
+                # 2.5 = Suapan cepat/besar
+                dynamic_factor = random.uniform(0.0, 2.5) 
+                
+                # Hitung laju sesaat (Instantaneous Rate)
+                instant_rate = self.current_base_rate * dynamic_factor
+                
+                # Konversi ke per detik (Rate / 3600)
+                consumed_this_second = instant_rate / 3600.0
+                
+                total_consumed += consumed_this_second
+
+            # Kurangi total berat pakan
+            self.feed_weight -= total_consumed
             if self.feed_weight < 0: self.feed_weight = 0
 
     def get_payload(self):
@@ -123,7 +141,7 @@ class CowFeedSimulator:
             "ip": self.device_ip,
             "id": DEVICE_ID,
             "rfid": RFID_TAG,
-            "w": round(self.feed_weight, 2), # Nilai w sekarang dalam GRAM
+            "w": round(self.feed_weight, 2),
             "temp": round(self.temperature, 2),
             "ts": timestamp
         })
@@ -135,7 +153,6 @@ def input_listener(sim):
     while True:
         user_input = input()
         if user_input.strip().lower() == "add":
-            # UBAH KE GRAM: 5kg - 8kg = 5000g - 8000g
             amount = random.uniform(5000.0, 8000.0)
             sim.refill_feed(amount)
         elif user_input.strip().lower() == "exit":
@@ -157,13 +174,16 @@ def main():
 
     threading.Thread(target=input_listener, args=(sim,), daemon=True).start()
 
-    print("Simulasi Berjalan (Satuan: Gram)...")
+    print("Simulasi Berjalan (Satuan: Gram, Jitter: Per Detik)...")
     
     try:
         while True:
             sim.check_schedule_and_weather() 
             sim.update_cow_state()
-            sim.process_consumption(2)
+            
+            # Loop utama berjalan setiap 2 detik
+            # Fungsi process_consumption akan menghitung variasi untuk detik ke-1 dan detik ke-2 secara terpisah
+            sim.process_consumption(interval_seconds=2) 
             
             payload = sim.get_payload()
             client.publish(MQTT_TOPIC, payload)
