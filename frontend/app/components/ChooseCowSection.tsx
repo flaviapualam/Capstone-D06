@@ -12,7 +12,7 @@ import PregnancyModal from './PregnancyModal';
 
 interface ChooseCowSectionProps {
   selectedCowName: string;
-  onCowSelect: (cowName: string) => void;
+  onCowSelect: (cowName: string, cowId?: string) => void;
   onCattleUpdated?: () => void;
   onSuccess?: (message: string) => void;
   refreshTrigger?: boolean;
@@ -40,12 +40,12 @@ export default function ChooseCowSection({
     }
 
     try {
-      const response = await cattleApi.getAll(user.farmerId);
+      const response = await cattleApi.getAll();
       if (response.success && response.data) {
         setCattle(response.data);
         // Auto-select first cattle if none selected
         if (!selectedCowName && response.data.length > 0) {
-          onCowSelect(response.data[0].name);
+          onCowSelect(response.data[0].name, response.data[0].cowId);
         }
       }
     } catch (error) {
@@ -91,7 +91,7 @@ export default function ChooseCowSection({
         setCattle(prev => prev.filter(c => c.cowId !== cow.cowId));
         onSuccess?.(`✅ Cattle "${cow.name}" deleted successfully!`);
         if (selectedCowName === cow.name) {
-          onCowSelect('');
+          onCowSelect('', undefined);
         }
       } else {
         onSuccess?.(`❌ Error: ${response.error || 'Failed to delete cattle'}`);
@@ -156,7 +156,7 @@ export default function ChooseCowSection({
                     ? 'border-blue-500 ring-2 ring-blue-200 bg-blue-50' 
                     : 'border-gray-200 hover:border-gray-300 bg-white'
                 }`}
-                onClick={() => onCowSelect(cow.name)}
+                onClick={() => onCowSelect(cow.name, cow.cowId)}
               >
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-3">

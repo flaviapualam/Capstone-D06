@@ -2,7 +2,7 @@ import { ApiResponse, User, LoginCredentials, RegisterData, Cattle, CattleRegist
 
 // Base API configuration
 // Direct backend URL (cross-origin request with credentials)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://project-capstone.my.id/api';
 
 console.log('API Base URL:', API_BASE_URL);
 
@@ -318,11 +318,27 @@ export const monitoringApi = {
     return { success: false, error: response.error || 'Failed to fetch sensor data' };
   },
 
-  // Historical data - fetch all, filter on frontend
-  getSensorHistory: async (cowId: string): Promise<ApiResponse<SensorReading[]>> => {
-    const response = await apiCall<any[]>(`/api/cow/${cowId}/sensor_history`, { 
+  // Historical data - fetch with different time ranges
+  getSensorHistory: async (cowId: string, timeRange: string = 'all'): Promise<ApiResponse<SensorReading[]>> => {
+    // Convert timeRange to hours parameter (backend max is 24 hours)
+    const hoursMap: Record<string, number> = {
+      'today': 24,
+      '2days': 24,  // Backend limit: max 24 hours
+      '7days': 24,  // Backend limit: max 24 hours
+      '30days': 24, // Backend limit: max 24 hours
+      'all': 24     // Backend limit: max 24 hours
+    };
+    
+    const hours = hoursMap[timeRange] || 24;
+    const url = `/cow/${cowId}/sensor_history?hours=${hours}`;
+    
+    console.log('Calling sensor history API:', url);
+    
+    const response = await apiCall<any[]>(url, { 
       method: 'GET' 
     });
+    
+    console.log('Sensor history API response:', response);
     
     if (response.success && response.data) {
       const sensorReadings: SensorReading[] = response.data.map((reading: any) => ({
@@ -330,9 +346,9 @@ export const monitoringApi = {
         cowId: reading.cow_id?.toString() || cowId,
         eatDuration: reading.eat_duration || 0,
         eatSpeed: reading.eat_speed || 0,
-        feedWeight: reading.feed_weight || 0,
+        feedWeight: reading.feed_weight || reading.weight || 0,
         anomalyScore: reading.anomaly_score || 0,
-        temperature: reading.temperature || 0,
+        temperature: reading.temperature || reading.temperature_c || 0,
         location: reading.location || '',
         isAnomaly: reading.is_anomaly || false,
       }));
@@ -341,27 +357,57 @@ export const monitoringApi = {
     return { success: false, error: response.error || 'Failed to fetch sensor history' };
   },
 
-  // Live/continuous streaming data
-  getLiveData: async (cowId: string): Promise<ApiResponse<SensorReading[]>> => {
-    const response = await apiCall<any[]>(`/api/streaming/cows/${cowId}`, { 
-      method: 'GET' 
-    });
+  // Live streaming with SSE - returns EventSource for real-time updates
+  createLiveStream: (
+    cowId: string, 
+    onData: (reading: SensorReading) => void, 
+    onError?: (error: string) => void,
+    onOpen?: () => void
+  ): EventSource => {
+    const url = `${API_BASE_URL}/streaming/cows/${cowId}`;
+    console.log('Creating SSE connection:', url);
     
-    if (response.success && response.data) {
-      const sensorReadings: SensorReading[] = response.data.map((reading: any) => ({
-        timeGenerated: reading.timestamp || reading.time_generated || new Date().toISOString(),
-        cowId: reading.cow_id?.toString() || cowId,
-        eatDuration: reading.eat_duration || 0,
-        eatSpeed: reading.eat_speed || 0,
-        feedWeight: reading.feed_weight || 0,
-        anomalyScore: reading.anomaly_score || 0,
-        temperature: reading.temperature || 0,
-        location: reading.location || '',
-        isAnomaly: reading.is_anomaly || false,
-      }));
-      return { success: true, data: sensorReadings };
-    }
-    return { success: false, error: response.error || 'Failed to fetch live data' };
+    const eventSource = new EventSource(url, { withCredentials: true });
+    
+    eventSource.onopen = () => {
+      console.log('✅ SSE connection established');
+      onOpen?.();
+    };
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('SSE data received:', data);
+        
+        // Map backend data to SensorReading
+        const reading: SensorReading = {
+          timeGenerated: data.timestamp || data.time_generated || new Date().toISOString(),
+          cowId: data.cow_id?.toString() || cowId,
+          eatDuration: data.eat_duration || 0,
+          eatSpeed: data.eat_speed || 0,
+          feedWeight: data.feed_weight || data.weight || 0,
+          anomalyScore: data.anomaly_score || 0,
+          temperature: data.temperature || data.temperature_c || 0,
+          location: data.location || data.ip || '',
+          isAnomaly: data.is_anomaly || false,
+        };
+        
+        onData(reading);
+      } catch (error) {
+        console.error('Error parsing SSE data:', error);
+        onError?.('Failed to parse sensor data');
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('❌ SSE connection error:', error);
+      const errorMsg = eventSource.readyState === EventSource.CLOSED 
+        ? 'Connection closed by server' 
+        : 'Failed to connect to sensor stream';
+      onError?.(errorMsg);
+    };
+    
+    return eventSource; // Return EventSource for cleanup
   },
 };
 

@@ -21,6 +21,7 @@ export default function Dashboard({ user }: DashboardProps) {
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [showRfidAssignmentModal, setShowRfidAssignmentModal] = useState(false);
   const [selectedCowName, setSelectedCowName] = useState<string>('');
+  const [selectedCowId, setSelectedCowId] = useState<string | undefined>(undefined);
   const [refreshCattle, setRefreshCattle] = useState(false);
   const { logout } = useAuth();
   const { toasts, showToast, removeToast } = useToast();
@@ -33,6 +34,11 @@ export default function Dashboard({ user }: DashboardProps) {
   const handleRfidAssigned = () => {
     setRefreshCattle(!refreshCattle);
     setShowRfidAssignmentModal(false);
+  };
+
+  const handleCowSelect = (cowName: string, cowId?: string) => {
+    setSelectedCowName(cowName);
+    setSelectedCowId(cowId);
   };
 
   return (
@@ -105,19 +111,22 @@ export default function Dashboard({ user }: DashboardProps) {
           </div>
           
           {/* Monitoring Section */}
-          <MonitoringSection />
-          
+          {/* <MonitoringSection /> */}
+
           {/* Choose Cow Section */}
           <ChooseCowSection 
             selectedCowName={selectedCowName}
-            onCowSelect={setSelectedCowName}
+            onCowSelect={handleCowSelect}
             onCattleUpdated={handleCattleRegistered}
             onSuccess={showToast}
             refreshTrigger={refreshCattle}
           />
           
           {/* Record Data Section */}
-          <RecordDataSection selectedCowName={selectedCowName} />
+          <RecordDataSection 
+            selectedCowName={selectedCowName} 
+            selectedCowId={selectedCowId}
+          />
         </div>
       </main>
 
