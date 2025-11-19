@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     MQTT_BROKER_HOST: str
     MQTT_BROKER_PORT: int = 1883
     MQTT_TOPIC_PREFIX: str = "cattle/sensor"
+    SMTP_SERVER: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str
+    SMTP_PASSWORD: str
+    EMAIL_SENDER: str = "alerts@yourdomain.com"
 
     class Config:
         env_file = ".env"
