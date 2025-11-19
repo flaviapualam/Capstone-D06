@@ -1,3 +1,4 @@
+# mqtt/client.py
 import asyncio
 import json
 import asyncpg
@@ -10,7 +11,6 @@ from services.crud_sensor import batch_insert_sensor_data
 from services.crud_device import upsert_device_status
 from services.crud_rfid import upsert_rfid_tags
 from services.crud_session import get_active_cow_by_rfid, create_eat_session
-
 from streaming.broker import streaming_broker
 
 MQTT_DATA_BUFFER: List[Dict[str, Any]] = []
@@ -18,9 +18,18 @@ BUFFER_SIZE = 100
 BUFFER_TIMEOUT = 5.0 
 
 ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
-SESSION_TIMEOUT_SECONDS = 60 
 
+SESSION_TIMEOUT_SECONDS = 58 
+NOISE_THRESHOLD = 0.005 
+
+# --- KONSTANTA BARU ---
+# Berat minimal pakan yang harus ada di timbangan (misal, 50 gram)
+# untuk mengindikasikan sesi yang valid.
+WEIGHT_START_THRESHOLD = 0.05 
+
+# --- FUNGSI BUFFER (Flush) tetap sama ---
 async def flush_buffer_to_db(pool: asyncpg.Pool):
+    # ... (Kode flush_buffer_to_db tetap sama) ...
     global MQTT_DATA_BUFFER
     if not MQTT_DATA_BUFFER:
         return
@@ -33,16 +42,14 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
     rfid_ids_to_register: set = set() 
 
     for msg in current_batch_dicts:
-        output_sensor_batch.append(
-            (
-                msg['timestamp'], 
-                msg['device_id'],
-                msg['rfid_id'],
-                msg['weight'],
-                msg['temperature_c'],
-                msg['ip']
-            )
-        )
+        output_sensor_batch.append((
+            msg['timestamp'], 
+            msg['device_id'],
+            msg['rfid_id'],
+            msg['weight'],
+            msg['temperature_c'],
+            msg['ip']
+        ))
         device_updates[msg['device_id']] = (msg['ip'], msg['timestamp'])
         rfid = msg.get('rfid_id')
         if rfid:
@@ -66,15 +73,22 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
         print(f"Failed to flush MQTT buffer to DB: {e}")
         MQTT_DATA_BUFFER.extend(current_batch_dicts)
 
+# --- FUNGSI FINALIZE SESSION tetap sama ---
 async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: float, last_timestamp: datetime):
     state = ACTIVE_SESSIONS.pop(device_id, None)
     if not state:
         return
+    
+    avg_temp = 0.0
+    if state['temp_count'] > 0:
+        avg_temp = state['temp_sum'] / state['temp_count']
+
     end_message = {
         "cow_id": str(state['cow_id']),
         "event": "session_end",
         "device_id": device_id,
-        "timestamp": last_timestamp.isoformat()
+        "timestamp": last_timestamp.isoformat(),
+        "average_temp": avg_temp
     }
     await streaming_broker.broadcast(state['cow_id'], end_message)
 
@@ -87,14 +101,17 @@ async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: floa
             time_start=state['time_start'],
             time_end=last_timestamp,
             weight_start=state['weight_start'],
-            weight_end=last_weight
+            weight_end=last_weight,
+            average_temp=avg_temp
         )
 
+# --- FUNGSI START NEW SESSION tetap sama ---
 async def start_new_session(
     pool: asyncpg.Pool, 
     device_id: str, 
     rfid_id: str, 
     weight: float, 
+    temp: float,
     timestamp: datetime
 ):
     cow_id = None
@@ -111,10 +128,14 @@ async def start_new_session(
         "time_start": timestamp,
         "weight_start": weight,
         "last_weight": weight,
-        "last_seen": timestamp
+        "last_seen": timestamp,
+        "last_consumption_time": timestamp,
+        "temp_sum": temp if temp else 0.0,
+        "temp_count": 1 if temp else 0
     }
     print(f"(SESSION START) Cow {cow_id} detected at {device_id}.")
 
+# --- FUNGSI PROCESS MQTT MESSAGE (PERBAIKAN UTAMA) ---
 async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
     global MQTT_DATA_BUFFER
     
@@ -123,21 +144,18 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
         
         device_id = payload.get("id")
         if not device_id:
-            print(f"Error: 'id' (device_id) tidak ditemukan di payload MQTT: {payload}")
             return
 
         client_timestamp_str = payload.get("ts")
         timestamp_obj: datetime
-        
         if not client_timestamp_str:
-            print(f"Warning: 'ts' (timestamp) tidak ada di payload. Gunakan waktu server.")
-            timestamp_obj = datetime.now()
+            timestamp_obj = datetime.now().astimezone()
         else:
             try:
                 timestamp_obj = datetime.fromisoformat(client_timestamp_str)
             except (ValueError, TypeError):
-                print(f"Error: Format 'ts' tidak valid: '{client_timestamp_str}'. Gunakan waktu server.")
-                timestamp_obj = datetime.now()
+                timestamp_obj = datetime.now().astimezone()
+        
         new_rfid = payload.get("rfid")
         new_weight = payload.get("w")
         new_temp = payload.get("temp")
@@ -158,8 +176,18 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
         
         if new_rfid == current_rfid:
             if state:
-                state['last_weight'] = new_weight
+                weight_diff = state['last_weight'] - new_weight
+                
                 state['last_seen'] = timestamp_obj
+                
+                # PERBAIKAN: Hanya update consumption time jika ada pengurangan signifikan
+                if weight_diff > NOISE_THRESHOLD:
+                    state['last_consumption_time'] = timestamp_obj
+                    
+                state['last_weight'] = new_weight
+                if new_temp is not None:
+                    state['temp_sum'] += new_temp
+                    state['temp_count'] += 1
 
                 broadcast_message = {
                     "cow_id": str(state['cow_id']),
@@ -172,17 +200,23 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
                 await streaming_broker.broadcast(state['cow_id'], broadcast_message)
         else:
             if state:
+                # Akhiri sesi lama (menggunakan last_seen)
                 await finalize_session(pool, device_id, state['last_weight'], state['last_seen'])
             
-            if new_rfid and new_weight is not None:
-                await start_new_session(pool, device_id, new_rfid, new_weight, timestamp_obj)
+            # --- PERBAIKAN STARTING LOGIC DI SINI ---
+            # HANYA mulai sesi baru jika RFID terdeteksi DAN berat > threshold (ada pakan)
+            if new_rfid and new_weight is not None and new_weight > WEIGHT_START_THRESHOLD:
+                await start_new_session(pool, device_id, new_rfid, new_weight, new_temp, timestamp_obj)
+            # --- AKHIR PERBAIKAN STARTING LOGIC ---
                 
     except Exception as e:
         print(f"Error processing MQTT message: {e}")
         print(f"Topic: {str(message.topic)}, Payload: {message.payload.decode()}")
 
+# --- FUNGSI-FUNGSI LAINNYA TETAP SAMA ---
+
 async def check_session_timeouts(pool: asyncpg.Pool):
-    now = datetime.now()
+    now = datetime.now().astimezone() 
     timeout_threshold = timedelta(seconds=SESSION_TIMEOUT_SECONDS)
     
     for device_id in list(ACTIVE_SESSIONS.keys()):
@@ -190,8 +224,8 @@ async def check_session_timeouts(pool: asyncpg.Pool):
         if not state: 
             continue
             
-        if now - state['last_seen'] > timeout_threshold:
-            print(f"Session for {device_id} timed out (1 min). Finalizing...")
+        if now - state['last_consumption_time'] > timeout_threshold:
+            print(f"Session for {device_id} timed out (consumption halt). Finalizing...")
 
             timeout_msg = {
                 "cow_id": str(state['cow_id']), 
@@ -210,7 +244,7 @@ async def check_session_timeouts(pool: asyncpg.Pool):
 
 async def session_timeout_checker_task(pool: asyncpg.Pool):
     while True:
-        await asyncio.sleep(10)
+        await asyncio.sleep(10) # Cek setiap 10 detik
         try:
             await check_session_timeouts(pool)
         except Exception as e:
@@ -219,7 +253,6 @@ async def session_timeout_checker_task(pool: asyncpg.Pool):
 async def mqtt_listener_task(pool: asyncpg.Pool):
     subscription_topic = f"{settings.MQTT_TOPIC_PREFIX}"
     print(f"Connecting to MQTT Broker at {settings.MQTT_BROKER_HOST}...")
-    
     last_flush_time = asyncio.get_event_loop().time()
 
     while True:
