@@ -99,11 +99,11 @@ class CowFeedSimulator:
         if now >= self.state_end_time:
             self.is_eating = not self.is_eating
             if self.is_eating:
-                self.state_end_time = self._get_duration(15, 30)
+                self.state_end_time = self._get_duration(15, 30) # Ini harus diganti 15 dan 30
                 self.current_base_rate = self._get_random_base_rate()
-                print(f"\n[SAPI] MAKAN. Base Rate Sesi Ini: {self.current_base_rate:.2f} g/jam.")
+                print(f"\n[SAPI] MAKAN. Base Rate Sesi Ini: {self.current_base_rate:.2f} g/jam. Waktu Selesai Sesi Ini: {self.state_end_time}")
             else:
-                self.state_end_time = self._get_duration(2, 10)
+                self.state_end_time = self._get_duration(2, 10) # ini harus diganti 2 dan 10
                 print(f"\n[SAPI] ISTIRAHAT. Sampai: {self.state_end_time.strftime('%H:%M:%S')}")
 
     def process_consumption(self, interval_seconds):
