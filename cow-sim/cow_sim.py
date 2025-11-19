@@ -19,6 +19,26 @@ RFID_TAG = "Cow-Sim-1"
 LATITUDE = -7.797
 LONGITUDE = 110.370
 
+# --- MQTT CALLBACKS (Untuk Debugging dan Keandalan) ---
+def on_connect(client, userdata, flags, rc):
+    """Dipanggil saat menerima CONNACK dari broker."""
+    if rc == 0:
+        print("\n[MQTT] ✅ KONEKSI BERHASIL")
+    else:
+        print(f"\n[MQTT] ❌ KONEKSI GAGAL dengan kode: {rc}. Mencoba reconnect...")
+
+def on_disconnect(client, userdata, rc):
+    """Dipanggil saat koneksi terputus."""
+    if rc != 0:
+        print(f"\n[MQTT] ⚠️ DISCONNECT tak terduga. Kode: {rc}. Paho akan mencoba reconnect.")
+
+def on_publish(client, userdata, mid):
+    """Dipanggil saat pesan telah berhasil dikirim ke broker."""
+    # Opsi: Bisa di-uncomment untuk log setiap pesan, namun bisa membuat terminal ramai.
+    # print(f"[MQTT] Pesan terkirim (MID: {mid})")
+    pass
+
+# --- CLASS SIMULATOR ---
 class CowFeedSimulator:
     def __init__(self):
         self.feed_weight = 0.0 # Gram
@@ -62,9 +82,9 @@ class CowFeedSimulator:
             return False, None
 
     def _get_random_base_rate(self):
-        # Rate dasar: 5000 gram/jam dengan varians +/- 2000g
-        base_rate = 5000.0
-        variance = random.uniform(-2000.0, 2000.0)
+        # Base rate (5-7 kg/jam, dikonversi ke gram)
+        base_rate = random.uniform(5000.0, 7000.0) 
+        variance = random.uniform(-1500.0, 1500.0)
         return base_rate + variance
 
     def _get_duration(self, min_min, max_min):
@@ -72,99 +92,119 @@ class CowFeedSimulator:
 
     def refill_feed(self, amount_gram):
         self.feed_weight += amount_gram
-        print(f"\n[INFO] Pakan ditambahkan {amount_gram:.2f} gram. Total: {self.feed_weight:.2f} gram")
+        print(f"\n[INFO] 🍚 Pakan ditambahkan {amount_gram:.2f} gram. Total: {self.feed_weight:.2f} gram")
 
     def check_schedule_and_weather(self):
         now = datetime.now()
         
+        # Penjadwalan Refill
         if now.hour != self.last_scheduled_hour:
-            if now.hour == 7 or now.hour == 13:
-                print(f"\n[JADWAL] Refill otomatis pukul {now.hour}:00.")
+            # Contoh jam makan: 7 pagi dan 1 siang
+            if now.hour == 7 or now.hour == 13: 
+                print(f"\n[JADWAL] ⏰ Refill otomatis pukul {now.hour}:00.")
                 self.refill_feed(10000.0) # 10kg = 10000g
                 self.last_scheduled_hour = now.hour
 
+        # Update Suhu
         time_diff = now - self.last_weather_update
-        if time_diff.total_seconds() > 600: 
+        if time_diff.total_seconds() > 600: # Update setiap 10 menit
             success, temp = self.fetch_real_temperature()
             if success:
-                print(f"\n[CUACA] Update suhu real-time: {temp}°C")
+                print(f"\n[CUACA] 🌡️ Update suhu real-time: {temp}°C")
 
     def update_cow_state(self):
         now = datetime.now()
+        
+        # Pengecekan pakan habis
         if self.feed_weight <= 0:
+            if self.is_eating:
+                print(f"\n[SAPI] 🛑 Pakan habis. Berhenti makan.")
             self.is_eating = False
             self.feed_weight = 0
             return
 
+        # Transisi status jika waktu sesi telah berakhir
         if now >= self.state_end_time:
             self.is_eating = not self.is_eating
             if self.is_eating:
-                self.state_end_time = self._get_duration(15, 30) # Ini harus diganti 15 dan 30
+                # Sesi Makan (Durasi acak 1-3 menit)
+                self.state_end_time = self._get_duration(1, 1) 
                 self.current_base_rate = self._get_random_base_rate()
-                print(f"\n[SAPI] MAKAN. Base Rate Sesi Ini: {self.current_base_rate:.2f} g/jam. Waktu Selesai Sesi Ini: {self.state_end_time}")
+                print(f"\n[SAPI] 😋 MAKAN. Base Rate Sesi Ini: {self.current_base_rate:.2f} g/jam. Selesai: {self.state_end_time.strftime('%H:%M:%S')}")
             else:
-                self.state_end_time = self._get_duration(2, 10) # ini harus diganti 2 dan 10
-                print(f"\n[SAPI] ISTIRAHAT. Sampai: {self.state_end_time.strftime('%H:%M:%S')}")
+                # Sesi Istirahat (Durasi acak 2-4 menit)
+                self.state_end_time = self._get_duration(1, 1) 
+                print(f"\n[SAPI] 😴 ISTIRAHAT. Sampai: {self.state_end_time.strftime('%H:%M:%S')}")
 
     def process_consumption(self, interval_seconds):
-        """
-        Simulasi konsumsi yang berubah SETIAP DETIK di dalam interval.
-        """
         if self.is_eating and self.feed_weight > 0:
             total_consumed = 0.0
             
-            # Kita loop per detik (meskipun interval 2 detik, kita hitung detik 1 dan detik 2 secara terpisah)
-            # int(interval_seconds) memastikan kita loop sesuai durasi sleep
+            # Simulasi konsumsi per detik dengan variasi
             for _ in range(int(interval_seconds)):
-                
-                # Faktor pengali acak (Jitter) per detik
-                # 0.0 = Sapi berhenti sebentar
-                # 1.0 = Kecepatan normal rata-rata
-                # 2.5 = Suapan cepat/besar
-                dynamic_factor = random.uniform(0.0, 2.5) 
-                
-                # Hitung laju sesaat (Instantaneous Rate)
+                # Jitter rate: Sapi makan tidak stabil
+                dynamic_factor = random.uniform(0.5, 2.0) 
                 instant_rate = self.current_base_rate * dynamic_factor
                 
-                # Konversi ke per detik (Rate / 3600)
+                # Konsumsi dalam gram/detik (rate/3600 detik)
                 consumed_this_second = instant_rate / 3600.0
                 
                 total_consumed += consumed_this_second
 
-            # Kurangi total berat pakan
             self.feed_weight -= total_consumed
             if self.feed_weight < 0: self.feed_weight = 0
 
     def get_payload(self):
+        # Format timestamp yang benar
         timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+07:00")
         return json.dumps({
             "ip": self.device_ip,
             "id": DEVICE_ID,
             "rfid": RFID_TAG,
-            "w": round(self.feed_weight, 2),
-            "temp": round(self.temperature, 2),
+            "w": round(self.feed_weight, 2), # Sisa pakan
+            "temp": round(self.temperature, 2), # Suhu lingkungan
             "ts": timestamp
         })
 
 # --- MAIN LISTENER & LOOP ---
 
 def input_listener(sim):
-    print("Ketik 'add' untuk nambah pakan (5000-8000 gram), 'exit' untuk keluar.")
+    print("\n--- KONTROL SIMULATOR ---")
+    print("Ketik 'add' untuk nambah pakan (5-8 kg), 'exit' untuk keluar.")
     while True:
-        user_input = input()
-        if user_input.strip().lower() == "add":
-            amount = random.uniform(5000.0, 8000.0)
-            sim.refill_feed(amount)
-        elif user_input.strip().lower() == "exit":
-            sys.exit()
+        try:
+            user_input = input()
+            if user_input.strip().lower() == "add":
+                # Tambahkan 5000-8000 gram pakan (5-8 kg)
+                amount = random.uniform(5000.0, 8000.0) 
+                sim.refill_feed(amount)
+            elif user_input.strip().lower() == "exit":
+                print("\n[SYSTEM] Keluar dari simulasi...")
+                sys.exit(0)
+        except EOFError:
+            # Menangani ketika input ditutup (misalnya saat di pipe)
+            time.sleep(1)
+        except Exception:
+            # Mengabaikan error input lainnya
+            pass
 
 def main():
     client = mqtt.Client()
+    
+    # Setup Callbacks
+    client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
+    client.on_publish = on_publish
+    
     try:
+        # Koneksi Awal
         client.connect(MQTT_BROKER, MQTT_PORT, 60)
-        print(f"Terhubung ke Broker: {MQTT_BROKER}")
-    except:
-        print("Gagal koneksi MQTT (Pastikan Broker Localhost jalan).")
+        
+        # Penting! Mulai loop network di thread terpisah untuk penanganan reconnect.
+        client.loop_start() 
+        
+    except Exception as e:
+        print(f"[SYSTEM] Gagal koneksi MQTT: {e}. Pastikan Broker Localhost jalan.")
         return
 
     sim = CowFeedSimulator()
@@ -172,30 +212,44 @@ def main():
     print("Mengambil data suhu awal...")
     sim.fetch_real_temperature()
 
+    # Thread untuk input user
     threading.Thread(target=input_listener, args=(sim,), daemon=True).start()
 
-    print("Simulasi Berjalan (Satuan: Gram, Jitter: Per Detik)...")
+    print("\n--- SIMULASI BERJALAN ---")
+    print("Interval pengiriman data: 2 detik.")
     
     try:
+        # Loop utama simulasi
         while True:
             sim.check_schedule_and_weather() 
             sim.update_cow_state()
             
-            # Loop utama berjalan setiap 2 detik
-            # Fungsi process_consumption akan menghitung variasi untuk detik ke-1 dan detik ke-2 secara terpisah
+            # Proses konsumsi pakan selama 2 detik
             sim.process_consumption(interval_seconds=2) 
             
             payload = sim.get_payload()
-            client.publish(MQTT_TOPIC, payload)
             
-            status = "MAKAN" if sim.is_eating else "ISTIRAHAT"
-            print(f"\r[{status}] IP: {sim.device_ip} | Temp: {sim.temperature}°C | Payload: {payload}   ", end="")
+            status = "ISTIRAHAT"
+            
+            # --- Kondisi: Hanya kirim data jika sapi sedang MAKAN ---
+            if sim.is_eating:
+                # QoS 0 (Fire and forget)
+                client.publish(MQTT_TOPIC, payload) 
+                status = "MAKAN"
+            
+            # Tampilan terminal (gunakan status koneksi MQTT untuk tampilan lebih baik)
+            mqtt_status = "Tersambung" if client.is_connected() else "DISCONNECTED"
+            
+            print(f"\r[{status}] [MQTT: {mqtt_status}] Pakan: {sim.feed_weight:.2f}g | Temp: {sim.temperature}°C | Payload: {payload[:40]}...   ", end="", flush=True)
             
             time.sleep(2)
 
     except KeyboardInterrupt:
+        print("\n\n[SYSTEM] Stop. Membersihkan koneksi...")
+    finally:
+        client.loop_stop() # Hentikan thread loop
         client.disconnect()
-        print("\nStop.")
+        print("[SYSTEM] Koneksi MQTT terputus.")
 
 if __name__ == "__main__":
     main()
