@@ -15,13 +15,11 @@ async def get_sessions_for_training(
     TERMASUK average_temp.
     """
     query = """
-    SELECT *, average_temp FROM eat_session
+    SELECT * FROM eat_session
     WHERE cow_id = $1 AND time_start BETWEEN $2 AND $3
     ORDER BY time_start;
     """
     return await db.fetch(query, cow_id, start_date, end_date)
-
-# --- FUNGSI get_recent_sessions_before SUDAH DIHILANGKAN ---
 
 async def save_new_model(
     db: asyncpg.Connection,

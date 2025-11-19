@@ -23,7 +23,7 @@ async def create_eat_session(
 ):
     if weight_end >= weight_start:
         print(f"(SESSION CANCELED) Sesi {device_id} dibatalkan (berat tidak berkurang).")
-        return
+        return None
 
     query = """
     INSERT INTO eat_session (
@@ -32,10 +32,11 @@ async def create_eat_session(
         weight_start, weight_end,
         average_temp
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    RETURNING session_id;
     """
     try:
-        await db.execute(
+        session_id = await db.fetchval(
             query, 
             device_id, rfid_id, cow_id, 
             time_start, time_end, 
@@ -43,5 +44,6 @@ async def create_eat_session(
             average_temp
         )
         print(f"(SESSION CREATED) Cow {cow_id} at {device_id} finished. Avg Temp: {average_temp:.2f}")
+        return session_id
     except Exception as e:
         print(f"Error creating eat_session: {e}")

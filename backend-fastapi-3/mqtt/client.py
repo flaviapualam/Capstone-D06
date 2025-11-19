@@ -5,12 +5,18 @@ import asyncpg
 import aiomqtt
 from datetime import datetime, timedelta
 from typing import List, Tuple, Dict, Any
+from uuid import UUID
+import joblib
+import io    
+import numpy as np
 
 from core.config import settings
 from services.crud_sensor import batch_insert_sensor_data 
 from services.crud_device import upsert_device_status
 from services.crud_rfid import upsert_rfid_tags
 from services.crud_session import get_active_cow_by_rfid, create_eat_session
+from services import crud_ml
+from ml.tasks import engineer_features
 from streaming.broker import streaming_broker
 
 MQTT_DATA_BUFFER: List[Dict[str, Any]] = []
@@ -19,17 +25,12 @@ BUFFER_TIMEOUT = 5.0
 
 ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 
-SESSION_TIMEOUT_SECONDS = 58 
+SESSION_TIMEOUT_SECONDS = 30 # Perlu diganti 60 
 NOISE_THRESHOLD = 0.005 
 
-# --- KONSTANTA BARU ---
-# Berat minimal pakan yang harus ada di timbangan (misal, 50 gram)
-# untuk mengindikasikan sesi yang valid.
 WEIGHT_START_THRESHOLD = 0.05 
 
-# --- FUNGSI BUFFER (Flush) tetap sama ---
 async def flush_buffer_to_db(pool: asyncpg.Pool):
-    # ... (Kode flush_buffer_to_db tetap sama) ...
     global MQTT_DATA_BUFFER
     if not MQTT_DATA_BUFFER:
         return
@@ -73,7 +74,39 @@ async def flush_buffer_to_db(pool: asyncpg.Pool):
         print(f"Failed to flush MQTT buffer to DB: {e}")
         MQTT_DATA_BUFFER.extend(current_batch_dicts)
 
-# --- FUNGSI FINALIZE SESSION tetap sama ---
+async def realtime_predict_and_save(
+    db: asyncpg.Connection, 
+    session_data: dict, 
+    cow_id: UUID
+) -> Tuple[float | None, bool]:
+    """
+    Muat model, engineer fitur, prediksi, dan simpan hasilnya ke tabel anomaly.
+    """
+    model_record = await crud_ml.get_active_model_for_cow(db, cow_id)
+    
+    if not model_record:
+        print(f"Warning: Tidak ada model aktif untuk Sapi {cow_id}. Lewati prediksi.")
+        return None, False
+
+    model_buffer = io.BytesIO(model_record['model_data'])
+    try:
+        model = joblib.load(model_buffer)
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return None, False
+
+    features_array = engineer_features([session_data])
+    if features_array.size == 0:
+        return None, False
+
+    current_features = features_array[0].reshape(1, -1)
+    
+    score = model.score_samples(current_features)[0]
+    prediction = model.predict(current_features)[0]
+    is_anomaly = True if prediction == -1 else False
+    
+    return float(score), is_anomaly
+
 async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: float, last_timestamp: datetime):
     state = ACTIVE_SESSIONS.pop(device_id, None)
     if not state:
@@ -83,17 +116,30 @@ async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: floa
     if state['temp_count'] > 0:
         avg_temp = state['temp_sum'] / state['temp_count']
 
-    end_message = {
-        "cow_id": str(state['cow_id']),
-        "event": "session_end",
+    session_data_to_save = {
         "device_id": device_id,
-        "timestamp": last_timestamp.isoformat(),
+        "rfid_id": state['rfid_id'],
+        "cow_id": state['cow_id'],
+        "time_start": state['time_start'],
+        "time_end": last_timestamp,
+        "weight_start": state['weight_start'],
+        "weight_end": last_weight,
         "average_temp": avg_temp
     }
-    await streaming_broker.broadcast(state['cow_id'], end_message)
-
+    
+    anomaly_score, is_anomaly = None, False
+    model_id = None
+    
     async with pool.acquire() as db:
-        await create_eat_session(
+        anomaly_score, is_anomaly = await realtime_predict_and_save(
+            db, session_data_to_save, state['cow_id']
+        )
+        
+        model_record = await crud_ml.get_active_model_for_cow(db, state['cow_id'])
+        if model_record:
+            model_id = model_record['model_id']
+        
+        session_id = await create_eat_session(
             db=db,
             device_id=device_id,
             rfid_id=state['rfid_id'],
@@ -105,7 +151,23 @@ async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: floa
             average_temp=avg_temp
         )
 
-# --- FUNGSI START NEW SESSION tetap sama ---
+        if session_id and model_id and is_anomaly is not None:
+            final_anomaly_data = [(model_id, session_id, anomaly_score, is_anomaly)]
+            await crud_ml.save_anomaly_scores(db, final_anomaly_data)
+
+
+    end_message = {
+        "cow_id": str(state['cow_id']),
+        "event": "session_end",
+        "device_id": device_id,
+        "timestamp": last_timestamp.isoformat(),
+        "average_temp": avg_temp,
+        "anomaly": is_anomaly,
+        "score": anomaly_score
+    }
+    await streaming_broker.broadcast(state['cow_id'], end_message)
+    print(f"(SESSION END) Cow {state['cow_id']} finished. Anomaly: {is_anomaly}")
+
 async def start_new_session(
     pool: asyncpg.Pool, 
     device_id: str, 
@@ -135,7 +197,6 @@ async def start_new_session(
     }
     print(f"(SESSION START) Cow {cow_id} detected at {device_id}.")
 
-# --- FUNGSI PROCESS MQTT MESSAGE (PERBAIKAN UTAMA) ---
 async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
     global MQTT_DATA_BUFFER
     
@@ -180,7 +241,6 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
                 
                 state['last_seen'] = timestamp_obj
                 
-                # PERBAIKAN: Hanya update consumption time jika ada pengurangan signifikan
                 if weight_diff > NOISE_THRESHOLD:
                     state['last_consumption_time'] = timestamp_obj
                     

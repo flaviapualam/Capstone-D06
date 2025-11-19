@@ -58,7 +58,7 @@ async def train_model_for_cow(pool: asyncpg.Pool, cow_id: UUID):
         
         session_records = await crud_ml.get_sessions_for_training(db, cow_id, start_date, end_date)
         
-        if len(session_records) < 100:
+        if len(session_records) < 10:
             print(f"(ML Training) Gagal: Data tidak cukup untuk Sapi {cow_id} (hanya {len(session_records)} sesi).")
             return
 
