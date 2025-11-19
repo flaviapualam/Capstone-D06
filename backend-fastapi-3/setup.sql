@@ -129,3 +129,9 @@ SELECT create_hypertable('output_sensor', 'timestamp', 'device_id', 2);
 
 CREATE INDEX idx_output_device_time ON output_sensor (device_id, "timestamp" DESC);
 CREATE INDEX idx_output_rfid_time ON output_sensor (rfid_id, "timestamp" DESC);
+
+ALTER TABLE eat_session 
+ADD COLUMN average_temp DECIMAL(5, 2);
+
+ALTER TABLE eat_session 
+ALTER COLUMN average_temp TYPE FLOAT USING average_temp::float;

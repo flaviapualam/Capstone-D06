@@ -200,20 +200,14 @@ async def process_mqtt_message(pool: asyncpg.Pool, message: aiomqtt.Message):
                 await streaming_broker.broadcast(state['cow_id'], broadcast_message)
         else:
             if state:
-                # Akhiri sesi lama (menggunakan last_seen)
                 await finalize_session(pool, device_id, state['last_weight'], state['last_seen'])
             
-            # --- PERBAIKAN STARTING LOGIC DI SINI ---
-            # HANYA mulai sesi baru jika RFID terdeteksi DAN berat > threshold (ada pakan)
             if new_rfid and new_weight is not None and new_weight > WEIGHT_START_THRESHOLD:
                 await start_new_session(pool, device_id, new_rfid, new_weight, new_temp, timestamp_obj)
-            # --- AKHIR PERBAIKAN STARTING LOGIC ---
                 
     except Exception as e:
         print(f"Error processing MQTT message: {e}")
         print(f"Topic: {str(message.topic)}, Payload: {message.payload.decode()}")
-
-# --- FUNGSI-FUNGSI LAINNYA TETAP SAMA ---
 
 async def check_session_timeouts(pool: asyncpg.Pool):
     now = datetime.now().astimezone() 

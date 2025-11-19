@@ -1,6 +1,6 @@
 # services/crud_ml.py
 import asyncpg
-import json # <-- Pastikan json diimpor
+import json 
 from uuid import UUID
 from datetime import datetime, timedelta
 
@@ -11,37 +11,17 @@ async def get_sessions_for_training(
     end_date: datetime
 ) -> list[asyncpg.Record]:
     """
-    Mengambil semua sesi makan untuk satu sapi dalam rentang waktu.
+    Mengambil semua sesi makan untuk satu sapi dalam rentang waktu, 
+    TERMASUK average_temp.
     """
     query = """
-    SELECT * FROM eat_session
+    SELECT *, average_temp FROM eat_session
     WHERE cow_id = $1 AND time_start BETWEEN $2 AND $3
     ORDER BY time_start;
     """
     return await db.fetch(query, cow_id, start_date, end_date)
 
-# --- FUNGSI BARU DI SINI ---
-async def get_recent_sessions_before(
-    db: asyncpg.Connection,
-    cow_id: UUID,
-    timestamp: datetime,
-    limit: int = 9
-) -> list[asyncpg.Record]:
-    """
-    Mengambil 'limit' sesi terakhir SEBELUM timestamp yang diberikan.
-    Penting untuk membangun konteks moving average saat prediksi.
-    """
-    query = """
-    SELECT * FROM eat_session
-    WHERE cow_id = $1 AND time_start < $2
-    ORDER BY time_start DESC
-    LIMIT $3;
-    """
-    # Mengambil secara DESC (terbaru dulu), lalu membaliknya
-    # agar menjadi urutan kronologis yang benar
-    records = await db.fetch(query, cow_id, timestamp, limit)
-    return list(reversed(records)) # Urutan: [paling lama ... paling baru]
-# --- AKHIR FUNGSI BARU ---
+# --- FUNGSI get_recent_sessions_before SUDAH DIHILANGKAN ---
 
 async def save_new_model(
     db: asyncpg.Connection,
