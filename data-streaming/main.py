@@ -30,9 +30,9 @@ SHARED_IP = "10.18.236.88"
 # Constants
 DEVICE_IDS = ["1", "2", "3"]
 RFID_MAPPING = {
-    "1": "8H13CJ7",
-    "2": "7F41TR2",
-    "3": "9K22PQ9",
+    "1": "A3B7E9F2",
+    "2": "5D8C4A1E",
+    "3": "F1G6H8K3",
 }
 SAMPLING_RATE_SECONDS = 1
 # Feeding behavior parameters
@@ -41,20 +41,48 @@ FEEDING_DURATION_JITTER_MIN = 10
 INTERVAL_BETWEEN_SESSIONS_MIN = 30  # Wait time between sessions
 BUFFER_TIME_SECONDS = 60
 
-# Load cell parameters
-INITIAL_WEIGHT_MIN = 6.5
-INITIAL_WEIGHT_MAX = 7.5
-CONSUMPTION_RATE_MIN = 0.002
-CONSUMPTION_RATE_MAX = 0.0025
-WEIGHT_NOISE_STD = 0.005
-SPIKE_PROBABILITY = 0.005
-SPIKE_MAGNITUDE = 0.3
+# Load cell parameters (in GRAMS to match real sensor data)
+INITIAL_WEIGHT_MIN_GRAMS = 5000   # 5 kg in grams
+INITIAL_WEIGHT_MAX_GRAMS = 8000   # 8 kg in grams
+CONSUMPTION_RATE_MIN_GRAMS = 1.5  # grams per second
+CONSUMPTION_RATE_MAX_GRAMS = 3.5  # grams per second
+WEIGHT_NOISE_STD_GRAMS = 500      # High noise (500g standard deviation)
+SPIKE_PROBABILITY = 0.15          # 15% chance of spike (more frequent)
+SPIKE_MAGNITUDE_GRAMS = 3000      # Large spikes up to 3kg
+BURST_PROBABILITY = 0.05          # 5% chance of eating burst
+BURST_DURATION_SECONDS = 10       # Burst lasts 10 seconds
+BURST_MULTIPLIER = 5              # Consumption rate multiplied during burst
 
-# Temperature parameters
-TEMP_MIN = 28.0
+# Temperature parameters (matching real sensor: 26-31°C range)
+TEMP_MIN = 26.0
 TEMP_MAX = 31.0
-TEMP_DRIFT_RATE = 0.02  # °C/min
-TEMP_UPDATE_INTERVAL = 60  # seconds
+TEMP_DRIFT_RATE = 0.15            # Faster temperature changes (°C/min)
+TEMP_NOISE_STD = 0.5              # Temperature noise
+TEMP_UPDATE_INTERVAL = 30         # Update every 30 seconds (more dynamic)
+
+# Anomaly configuration
+ANOMALY_PROBABILITY = 0.10        # 10% of sessions will have anomalies
+
+# Distribution of anomaly types (must sum to 1.0)
+ANOMALY_DISTRIBUTION = {
+    'too_fast_eating': 0.20,       # 20% of anomalies - eating rate > 6 g/s
+    'too_slow_eating': 0.20,       # 20% of anomalies - eating rate < 0.8 g/s
+    'no_eating': 0.20,             # 20% of anomalies - consumption rate ~0
+    'interrupted_session': 0.15,   # 15% of anomalies - session stops early
+    'excessive_eating': 0.15,      # 15% of anomalies - session > 90 min
+    'erratic_pattern': 0.10,       # 10% of anomalies - on-off eating pattern
+}
+
+# Anomaly-specific parameters
+ANOMALY_FAST_CONSUMPTION_MIN = 6.0   # g/s (normal max: 3.5)
+ANOMALY_FAST_CONSUMPTION_MAX = 10.0  # g/s
+ANOMALY_SLOW_CONSUMPTION_MIN = 0.2   # g/s (normal min: 1.5)
+ANOMALY_SLOW_CONSUMPTION_MAX = 0.8   # g/s
+ANOMALY_EXCESSIVE_DURATION_MIN = 90  # minutes
+ANOMALY_EXCESSIVE_DURATION_MAX = 120 # minutes
+ANOMALY_INTERRUPTION_POINT_MIN = 0.3 # Interrupt at 30% of duration
+ANOMALY_INTERRUPTION_POINT_MAX = 0.5 # Interrupt at 50% of duration
+ANOMALY_ERRATIC_SWITCH_INTERVAL = 30 # Switch fast/slow every 30 seconds
 
 # Session metadata output
 SESSION_METADATA_DIR = "./session_metadata"
@@ -133,18 +161,87 @@ class DeviceSessionSimulator:
         self.duration_min = duration_min
         self.session_end = session_start + timedelta(minutes=duration_min)
         
-        # Initialize weight parameters
-        self.initial_weight = random.uniform(INITIAL_WEIGHT_MIN, INITIAL_WEIGHT_MAX)
-        self.consumption_rate = random.uniform(CONSUMPTION_RATE_MIN, CONSUMPTION_RATE_MAX)
+        # Determine if this session is anomalous
+        self.is_anomaly = random.random() < ANOMALY_PROBABILITY
+        self.anomaly_type = None
+        
+        # Initialize weight parameters (in GRAMS)
+        self.initial_weight = random.uniform(INITIAL_WEIGHT_MIN_GRAMS, INITIAL_WEIGHT_MAX_GRAMS)
+        self.consumption_rate = random.uniform(CONSUMPTION_RATE_MIN_GRAMS, CONSUMPTION_RATE_MAX_GRAMS)
         self.current_weight = self.initial_weight
         
-        # Initialize temperature parameters
+        # Initialize temperature parameters (ambient temperature)
         self.current_temp = random.uniform(TEMP_MIN, TEMP_MAX)
         self.temp_drift = random.uniform(-TEMP_DRIFT_RATE, TEMP_DRIFT_RATE)
+        
+        # Burst eating state
+        self.in_burst = False
+        self.burst_end_time = None
+        
+        # Anomaly-specific attributes
+        self.interruption_point = None
+        self.erratic_phase = 0  # For erratic pattern
+        self.session_interrupted = False
+        
+        # Apply anomaly behavior if this is an anomaly session
+        if self.is_anomaly:
+            self._apply_anomaly_behavior()
         
         self.elapsed_seconds = 0
         self.readings_count = 0
         self.logger = logging.getLogger(__name__)
+    
+    def _apply_anomaly_behavior(self):
+        """Modify session parameters based on anomaly type"""
+        # Select anomaly type based on distribution
+        self.anomaly_type = random.choices(
+            list(ANOMALY_DISTRIBUTION.keys()),
+            weights=list(ANOMALY_DISTRIBUTION.values()),
+            k=1
+        )[0]
+        
+        if self.anomaly_type == 'too_fast_eating':
+            # Very fast eating (stress, competition, hunger)
+            self.consumption_rate = random.uniform(
+                ANOMALY_FAST_CONSUMPTION_MIN, 
+                ANOMALY_FAST_CONSUMPTION_MAX
+            )
+            self.logger.info(f"  ⚠️  ANOMALY: Too fast eating ({self.consumption_rate:.2f} g/s)")
+            
+        elif self.anomaly_type == 'too_slow_eating':
+            # Very slow eating (illness, pain, weakness)
+            self.consumption_rate = random.uniform(
+                ANOMALY_SLOW_CONSUMPTION_MIN, 
+                ANOMALY_SLOW_CONSUMPTION_MAX
+            )
+            self.logger.info(f"  ⚠️  ANOMALY: Too slow eating ({self.consumption_rate:.2f} g/s)")
+            
+        elif self.anomaly_type == 'no_eating':
+            # No eating at all (sick, obstruction, feed problem)
+            self.consumption_rate = 0.0
+            self.logger.info(f"  ⚠️  ANOMALY: No eating (fake session)")
+            
+        elif self.anomaly_type == 'interrupted_session':
+            # Session will stop early
+            self.interruption_point = random.uniform(
+                ANOMALY_INTERRUPTION_POINT_MIN, 
+                ANOMALY_INTERRUPTION_POINT_MAX
+            )
+            interruption_min = self.duration_min * self.interruption_point
+            self.logger.info(f"  ⚠️  ANOMALY: Interrupted session (will stop at {interruption_min:.1f} min)")
+            
+        elif self.anomaly_type == 'excessive_eating':
+            # Extend duration significantly
+            self.duration_min = random.uniform(
+                ANOMALY_EXCESSIVE_DURATION_MIN, 
+                ANOMALY_EXCESSIVE_DURATION_MAX
+            )
+            self.session_end = self.session_start + timedelta(minutes=self.duration_min)
+            self.logger.info(f"  ⚠️  ANOMALY: Excessive eating ({self.duration_min:.1f} min)")
+            
+        elif self.anomaly_type == 'erratic_pattern':
+            # On-off eating pattern
+            self.logger.info(f"  ⚠️  ANOMALY: Erratic eating pattern (switching every {ANOMALY_ERRATIC_SWITCH_INTERVAL}s)")
 
     
     def is_active(self, now: datetime) -> bool:
@@ -161,9 +258,18 @@ class DeviceSessionSimulator:
         self.elapsed_seconds = seconds_from_start
         self.readings_count += 1
         
-        # Update temperature every 60 seconds
+        # Check for interrupted session anomaly
+        if self.anomaly_type == 'interrupted_session' and not self.session_interrupted:
+            if seconds_from_start >= (self.duration_min * 60 * self.interruption_point):
+                # End session early
+                self.session_end = now
+                self.session_interrupted = True
+                return None  # Stop generating readings
+        
+        # Update temperature every 30 seconds with noise
         if seconds_from_start % TEMP_UPDATE_INTERVAL == 0:
             self.current_temp += self.temp_drift * (TEMP_UPDATE_INTERVAL / 60)
+            self.current_temp += np.random.normal(0, TEMP_NOISE_STD)
             self.current_temp = np.clip(self.current_temp, TEMP_MIN, TEMP_MAX)
         
         # Determine feeding phase
@@ -171,47 +277,90 @@ class DeviceSessionSimulator:
         in_buffer_start = seconds_from_start < BUFFER_TIME_SECONDS
         in_buffer_end = seconds_from_start >= (duration_seconds - BUFFER_TIME_SECONDS)
         
-        # Weight behavior
+        # Handle erratic pattern anomaly
+        if self.anomaly_type == 'erratic_pattern':
+            # Switch between fast and slow eating every N seconds
+            phase = (seconds_from_start // ANOMALY_ERRATIC_SWITCH_INTERVAL) % 2
+            if phase == 0:
+                # Fast phase
+                consumption = random.uniform(5.0, 7.0)
+            else:
+                # Slow/pause phase
+                consumption = random.uniform(0.0, 0.5)
+        else:
+            # Normal consumption rate (or anomaly-modified rate)
+            consumption = self.consumption_rate
+        
+        # Check for burst eating events (only for non-anomaly or non-erratic sessions)
+        if not self.anomaly_type or self.anomaly_type not in ['erratic_pattern', 'no_eating']:
+            if not self.in_burst and random.random() < BURST_PROBABILITY:
+                self.in_burst = True
+                self.burst_end_time = now + timedelta(seconds=BURST_DURATION_SECONDS)
+            
+            if self.in_burst and now >= self.burst_end_time:
+                self.in_burst = False
+        
+        # Weight behavior with realistic noise patterns
         if in_buffer_start or in_buffer_end:
-            # Buffer phase: weight stays constant with small noise
-            noise = np.random.normal(0, WEIGHT_NOISE_STD * 0.5)
+            # Buffer phase: weight stays constant with moderate noise
+            noise = np.random.normal(0, WEIGHT_NOISE_STD_GRAMS * 0.3)
             weight = self.current_weight + noise
         else:
-            # Active feeding: decrease weight
-            self.current_weight -= self.consumption_rate
-            noise = np.random.normal(0, WEIGHT_NOISE_STD)
+            # Active feeding: decrease weight with consumption rate
             
-            # Random spike
+            # During burst: eat much faster (only if not anomaly)
+            if self.in_burst and not self.anomaly_type:
+                consumption *= BURST_MULTIPLIER
+            
+            self.current_weight -= consumption
+            
+            # Add realistic high-variance noise
+            noise = np.random.normal(0, WEIGHT_NOISE_STD_GRAMS)
+            
+            # Random large spikes (simulating cow movement, sensor noise)
             if random.random() < SPIKE_PROBABILITY:
-                noise += random.choice([-1, 1]) * SPIKE_MAGNITUDE
+                spike = random.choice([-1, 1]) * random.uniform(SPIKE_MAGNITUDE_GRAMS * 0.5, SPIKE_MAGNITUDE_GRAMS)
+                noise += spike
             
             weight = self.current_weight + noise
         
-        # Format payload with new structure
-        # {"ip": "10.18.236.88", "id": "01", "rfid": "C96EF997", "w": 85.61, "temp": 84.89, "ts": "2000-01-01T07:04:07+07:00"}
+        # Ensure weight doesn't go negative
+        weight = max(0, weight)
+        
+        # Format payload - weight in GRAMS to match real sensor
+        # {"ip": "10.18.236.88", "id": "01", "rfid": "C96EF997", "w": 5432.18, "temp": 28.45, "ts": "2000-01-01T07:04:07+07:00"}
         return {
             "ip": SHARED_IP,
             "id": self.device_id.zfill(2),  # "1" -> "01"
             "rfid": self.rfid_id,
-            "w": round(max(0, weight), 2),
+            "w": round(weight, 2),  # Weight in GRAMS (not kg)
             "temp": round(self.current_temp, 2),
             "ts": now.astimezone(TZ_OFFSET).isoformat()
         }
     
     def get_metadata(self) -> dict:
         """Get session metadata for logging"""
-        return {
+        metadata = {
             "device_id": self.device_id,
             "rfid_id": self.rfid_id,
             "session_start": self.session_start.isoformat(),
             "session_end": self.session_end.isoformat(),
             "duration_min": round(self.duration_min, 2),
-            "initial_weight_kg": round(self.initial_weight, 3),
-            "consumption_rate_kg_per_sec": round(self.consumption_rate, 6),
+            "initial_weight_grams": round(self.initial_weight, 2),
+            "consumption_rate_grams_per_sec": round(self.consumption_rate, 3),
             "initial_temp_c": round(self.current_temp, 2),
             "temp_drift_c_per_min": round(self.temp_drift, 4),
             "total_readings": self.readings_count,
+            "is_anomaly": self.is_anomaly,
+            "anomaly_type": self.anomaly_type if self.is_anomaly else None,
         }
+        
+        # Add anomaly-specific metadata
+        if self.anomaly_type == 'interrupted_session':
+            metadata["interrupted"] = self.session_interrupted
+            metadata["interruption_point"] = round(self.interruption_point, 3) if self.interruption_point else None
+        
+        return metadata
 
 
 

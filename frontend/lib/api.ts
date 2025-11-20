@@ -320,13 +320,13 @@ export const monitoringApi = {
 
   // Historical data - fetch with different time ranges
   getSensorHistory: async (cowId: string, timeRange: string = 'all'): Promise<ApiResponse<SensorReading[]>> => {
-    // Convert timeRange to hours parameter (backend max is 24 hours)
+    // Convert timeRange to hours parameter (backend max is 720 hours = 30 days)
     const hoursMap: Record<string, number> = {
       'today': 24,
-      '2days': 24,  // Backend limit: max 24 hours
-      '7days': 24,  // Backend limit: max 24 hours
-      '30days': 24, // Backend limit: max 24 hours
-      'all': 24     // Backend limit: max 24 hours
+      '2days': 48,
+      '7days': 168,   // 7 * 24
+      '30days': 720,  // 30 * 24
+      'all': 720      // Max 30 days
     };
     
     const hours = hoursMap[timeRange] || 24;
@@ -471,6 +471,88 @@ export const pregnancyApi = {
   },
 };
 
+// ML/Anomaly API (maps to /api/ml/anomaly endpoints)
+export const mlApi = {
+  // Get all anomalies (optionally filter by cow_id)
+  getAnomalies: async (cowId?: string): Promise<ApiResponse<any[]>> => {
+    let url = '/ml/anomaly';
+    if (cowId) {
+      url += `?cow_id=${cowId}`;
+    }
+    
+    const response = await apiCall<{ anomalies: any[] }>(url, { 
+      method: 'GET' 
+    });
+    
+    if (response.success && response.data) {
+      // Map anomalies and add severity based on score
+      const anomalies = response.data.anomalies.map((anomaly: any) => ({
+        ...anomaly,
+        severity: anomaly.anomaly_score > -0.2 ? 'high' : 
+                  anomaly.anomaly_score > -0.4 ? 'medium' : 'low',
+      }));
+      
+      return { success: true, data: anomalies };
+    }
+    return { success: false, error: response.error || 'Failed to fetch anomalies' };
+  },
+
+  // Resend email alert for specific anomaly
+  resendAnomalyEmail: async (anomalyId: number): Promise<ApiResponse<any>> => {
+    const response = await apiCall<any>(`/anomaly/${anomalyId}/send-alert`, {
+      method: 'POST',
+    });
+    
+    return response;
+  },
+};
+
+// Eating Session API (for MonitoringSection)
+export const eatingSessionApi = {
+  // Get all sessions for a cow (optional date range)
+  getSessions: async (
+    cowId: string, 
+    startDate?: string, 
+    endDate?: string
+  ): Promise<ApiResponse<any[]>> => {
+    let url = `/cow/${cowId}/eating-sessions`;
+    const params = new URLSearchParams();
+    
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    const response = await apiCall<{ sessions: any[] }>(url, { method: 'GET' });
+    if (response.success && response.data) {
+      return { success: true, data: response.data.sessions };
+    }
+    return { success: false, error: response.error || 'Failed to fetch eating sessions' };
+  },
+
+  // Get daily summary (last N days)
+  getDailySummary: async (cowId: string, days: number = 7): Promise<ApiResponse<any>> => {
+    const url = `/cow/${cowId}/daily-summary?days=${days}`;
+    const response = await apiCall<any>(url, { method: 'GET' });
+    
+    if (response.success && response.data) {
+      return { success: true, data: response.data };
+    }
+    return { success: false, error: response.error || 'Failed to fetch daily summary' };
+  },
+
+  // Get weekly summary (current week + previous week)
+  getWeeklySummary: async (cowId: string, weeks: number = 2): Promise<ApiResponse<any>> => {
+    const url = `/cow/${cowId}/weekly-summary?weeks=${weeks}`;
+    const response = await apiCall<any>(url, { method: 'GET' });
+    
+    if (response.success && response.data) {
+      return { success: true, data: response.data };
+    }
+    return { success: false, error: response.error || 'Failed to fetch weekly summary' };
+  },
+};
+
 export const api = {
   auth: authApi,
   cattle: cattleApi,
@@ -478,6 +560,8 @@ export const api = {
   monitoring: monitoringApi,
   rfid: rfidApi,
   pregnancy: pregnancyApi,
+  ml: mlApi,
+  eatingSession: eatingSessionApi,
 };
 
 export default api;

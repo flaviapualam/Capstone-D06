@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { LogOut, Plus, Tag, Menu, X } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -27,20 +27,20 @@ export default function Dashboard({ user }: DashboardProps) {
   const { logout } = useAuth();
   const { toasts, showToast, removeToast } = useToast();
 
-  const handleCattleRegistered = () => {
-    setRefreshCattle(!refreshCattle);
+  const handleCattleRegistered = useCallback(() => {
+    setRefreshCattle(prev => !prev);
     setShowRegistrationModal(false);
-  };
+  }, []);
 
-  const handleRfidAssigned = () => {
-    setRefreshCattle(!refreshCattle);
+  const handleRfidAssigned = useCallback(() => {
+    setRefreshCattle(prev => !prev);
     setShowRfidAssignmentModal(false);
-  };
+  }, []);
 
-  const handleCowSelect = (cowName: string, cowId?: string) => {
+  const handleCowSelect = useCallback((cowName: string, cowId?: string) => {
     setSelectedCowName(cowName);
     setSelectedCowId(cowId);
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -64,8 +64,7 @@ export default function Dashboard({ user }: DashboardProps) {
             <div className="hidden md:flex items-center space-x-3">
               <span className="text-sm text-gray-600 mr-2">Welcome, {user.name}</span>
               
-              {/* Alerts Section */}
-              <AlertsSection />
+              <AlertsSection onShowToast={showToast} />
               
               <Button
                 variant="outline"
@@ -100,7 +99,7 @@ export default function Dashboard({ user }: DashboardProps) {
             
             {/* Mobile Menu Button + Alerts */}
             <div className="flex md:hidden items-center space-x-2">
-              <AlertsSection />
+              <AlertsSection onShowToast={showToast} />
               <Button
                 variant="ghost"
                 size="sm"
@@ -168,9 +167,6 @@ export default function Dashboard({ user }: DashboardProps) {
               Monitor your cattle health, activity, and feed intake from your dashboard.
             </p>
           </div>
-          
-          {/* Monitoring Section */}
-          {/* <MonitoringSection /> */}
 
           {/* Choose Cow Section */}
           <ChooseCowSection 
@@ -179,6 +175,13 @@ export default function Dashboard({ user }: DashboardProps) {
             onCattleUpdated={handleCattleRegistered}
             onSuccess={showToast}
             refreshTrigger={refreshCattle}
+          />
+          
+          {/* Monitoring Section - Eating Session Summary */}
+          <MonitoringSection 
+            selectedCowName={selectedCowName} 
+            selectedCowId={selectedCowId}
+            onShowToast={showToast}
           />
           
           {/* Record Data Section */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Cattle } from '@/types';
@@ -33,7 +33,7 @@ export default function ChooseCowSection({
   const [selectedCowForEdit, setSelectedCowForEdit] = useState<Cattle | null>(null);
   const [selectedCowForPregnancy, setSelectedCowForPregnancy] = useState<Cattle | null>(null);
 
-  const fetchCattle = async () => {
+  const fetchCattle = useCallback(async () => {
     if (!user?.farmerId) {
       setLoading(false);
       return;
@@ -53,20 +53,18 @@ export default function ChooseCowSection({
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.farmerId, selectedCowName, onCowSelect]);
 
   useEffect(() => {
     fetchCattle();
-  }, [user?.farmerId, refreshTrigger]);
+  }, [fetchCattle, refreshTrigger]);
 
-  const handleCattleUpdated = (updatedCattle: Cattle) => {
-    setCattle(prev => 
-      prev.map(c => c.name === updatedCattle.name ? updatedCattle : c)
-    );
+  const handleCattleUpdated = useCallback(() => {
     setShowEditModal(false);
     setSelectedCowForEdit(null);
     onCattleUpdated?.();
-  };
+    fetchCattle(); // Re-fetch to get updated data
+  }, [onCattleUpdated, fetchCattle]);
 
   const handleEditClick = (e: React.MouseEvent, cow: Cattle) => {
     e.stopPropagation();
