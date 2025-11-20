@@ -16,7 +16,7 @@ from services.crud_device import upsert_device_status
 from services.crud_rfid import upsert_rfid_tags
 from services.crud_session import get_active_cow_by_rfid, create_eat_session
 from services import crud_ml, crud_cow, authentication
-# from services.email import send_anomaly_alert
+from services.email import send_anomaly_alert
 from ml.tasks import engineer_features
 from streaming.broker import streaming_broker
 
@@ -183,14 +183,14 @@ async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: floa
                 "message": f"ALERT: Anomali terdeteksi! Sapi {state['cow_id']} ({avg_temp:.2f}°C)."
             }
             await streaming_broker.broadcast(farmer_id, alert_msg)
-        # if is_anomaly and farmer_email:
-        #     await send_anomaly_alert(
-        #         farmer_email=farmer_email,
-        #         cow_id=state['cow_id'],
-        #         score=anomaly_score,
-        #         avg_temp=avg_temp,
-        #         time=last_timestamp
-        #     )
+        if is_anomaly and farmer_email:
+            await send_anomaly_alert(
+                farmer_email=farmer_email,
+                cow_id=state['cow_id'],
+                score=anomaly_score,
+                avg_temp=avg_temp,
+                time=last_timestamp
+            )
         print(f"(SESSION END) Cow {state['cow_id']} finished. Anomaly: {is_anomaly}")
 
 async def start_new_session(

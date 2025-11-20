@@ -10,11 +10,11 @@ from datetime import datetime, timedelta
 import paho.mqtt.client as mqtt
 
 # --- 1. KONFIGURASI DAN GLOBAL ---
-MQTT_BROKER = "localhost" 
+MQTT_BROKER = "103.181.143.162" 
 MQTT_PORT = 1883
 MQTT_TOPIC = "cattle/sensor"
-DEVICE_ID = "Device-Sim-1"
-RFID_TAG = "Cow-Sim-1"
+DEVICE_ID = "Capstone-Demonstration-1"
+RFID_TAG = "Capstone-Demonstration-1"
 LATITUDE = -7.797
 LONGITUDE = 110.370
 

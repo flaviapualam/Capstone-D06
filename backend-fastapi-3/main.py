@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     mqtt_task = asyncio.create_task(mqtt_listener_task(pool))
     session_task = asyncio.create_task(session_timeout_checker_task(pool)) # <-- Jalankan task timeout
     ml_training_task = asyncio.create_task(periodic_training_task(pool))
-    ml_prediction_task = asyncio.create_task(periodic_prediction_task(pool))
+    # ml_prediction_task = asyncio.create_task(periodic_prediction_task(pool))
 
     yield
     
@@ -47,10 +47,10 @@ async def lifespan(app: FastAPI):
         try: await ml_training_task
         except asyncio.CancelledError: print("ML training task successfully cancelled.")
 
-    if ml_prediction_task:
-        ml_prediction_task.cancel()
-        try: await ml_prediction_task
-        except asyncio.CancelledError: print("ML prediction task successfully cancelled.")
+    # if ml_prediction_task:
+    #     ml_prediction_task.cancel()
+    #     try: await ml_prediction_task
+    #     except asyncio.CancelledError: print("ML prediction task successfully cancelled.")
  
     await close_db_connection()
 
@@ -105,20 +105,20 @@ async def health_check(
             detail={"api_status": "ok", "db_status": db_status, "message": db_message}
         )
     
-    smtp_status = "ok"
+    smtp_status = "error"
     smtp_message = ""
     
-    # try:
-    #     # Panggil fungsi asinkron (yang menjalankan kode blocking di thread)
-    #     smtp_is_ok = await check_smtp_async()
-    #     if smtp_is_ok:
-    #         smtp_status = "ok"
-    #         smtp_message = "SMTP connection is healthy."
-    #     else:
-    #         smtp_message = "SMTP login or connection failed."
+    try:
+        # Panggil fungsi asinkron (yang menjalankan kode blocking di thread)
+        smtp_is_ok = await check_smtp_async()
+        if smtp_is_ok:
+            smtp_status = "ok"
+            smtp_message = "SMTP connection is healthy."
+        else:
+            smtp_message = "SMTP login or connection failed."
             
-    # except Exception as e:
-    #     smtp_message = f"SMTP check failed: {str(e)}"
+    except Exception as e:
+        smtp_message = f"SMTP check failed: {str(e)}"
 
     final_status = "ok" if db_status == "ok" and smtp_status == "ok" else "error"
     if final_status == "error":
