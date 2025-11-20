@@ -1,0 +1,15 @@
+[
+    {
+        "session_id": "8fbe6c1c-3728-4502-813c-d05c8e2a9491",
+        "device_id": "Device-Sim-1",
+        "rfid_id": "Cow-Sim-1",
+        "cow_id": "c7f3746c-2287-4f84-a1f9-c1764804f3ac",
+        "time_start": "2025-10-30T07:00:00+07:00",
+        "time_end": "2025-11-30T14:03:30+07:00",
+        "weight_start": 6977.59,
+        "weight_end": 0,
+        "average_temp": 30.0,
+        "is_anomaly": false,
+        "anomaly_score": -0.209
+    }
+]
