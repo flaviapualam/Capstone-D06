@@ -4,16 +4,16 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { UtensilsCrossed, Clock, Weight, Thermometer, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { toast } from 'react-hot-toast';
 
 interface MonitoringSectionProps {
   selectedCowId?: string;
   selectedCowName?: string;
+  onShowToast?: (message: string, type: 'success' | 'error') => void;
 }
 
 type ViewMode = 'daily' | 'weekly';
 
-export default function MonitoringSection({ selectedCowId, selectedCowName }: MonitoringSectionProps) {
+export default function MonitoringSection({ selectedCowId, selectedCowName, onShowToast }: MonitoringSectionProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
   const [showDetails, setShowDetails] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -34,19 +34,17 @@ export default function MonitoringSection({ selectedCowId, selectedCowName }: Mo
           setEatingData(response.data);
         } else {
           console.error('Failed to fetch eating data:', response.error);
-          toast.error('Failed to load eating session data');
+          onShowToast?.('Failed to load eating session data', 'error');
         }
       } catch (error) {
         console.error('Error fetching eating data:', error);
-        toast.error('Error loading eating data');
+        onShowToast?.('Error loading eating data', 'error');
       } finally {
         setLoading(false);
       }
     };
 
     fetchEatingData();
-  }, [selectedCowId]);
-
   }, [selectedCowId]);
 
   // Helper functions
@@ -118,22 +116,6 @@ export default function MonitoringSection({ selectedCowId, selectedCowName }: Mo
   const todayData = currentWeek.daily_summaries?.[currentWeek.daily_summaries.length - 1];
   const todaySessions = todayData?.sessions || [];
   const currentData = viewMode === 'weekly' ? currentWeek : todayData;
-
-  // Format weight in kg
-  const formatWeight = (grams: number): string => {
-    return `${(grams / 1000).toFixed(2)} kg`;
-  };
-
-  // Format eat speed
-  const formatSpeed = (gramsPerSecond: number): string => {
-    return `${gramsPerSecond.toFixed(2)} g/s`;
-  };
-
-  // Format time for session card
-  const formatSessionTime = (timestamp: string): string => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
 
   return (
     <section className="space-y-6">

@@ -64,8 +64,7 @@ export default function Dashboard({ user }: DashboardProps) {
             <div className="hidden md:flex items-center space-x-3">
               <span className="text-sm text-gray-600 mr-2">Welcome, {user.name}</span>
               
-              {/* Alerts Section */}
-              <AlertsSection />
+              <AlertsSection onShowToast={showToast} />
               
               <Button
                 variant="outline"
@@ -100,7 +99,7 @@ export default function Dashboard({ user }: DashboardProps) {
             
             {/* Mobile Menu Button + Alerts */}
             <div className="flex md:hidden items-center space-x-2">
-              <AlertsSection />
+              <AlertsSection onShowToast={showToast} />
               <Button
                 variant="ghost"
                 size="sm"
@@ -179,7 +178,11 @@ export default function Dashboard({ user }: DashboardProps) {
           />
           
           {/* Monitoring Section - Eating Session Summary */}
-          <MonitoringSection selectedCowName={selectedCowName} />
+          <MonitoringSection 
+            selectedCowName={selectedCowName} 
+            selectedCowId={selectedCowId}
+            onShowToast={showToast}
+          />
           
           {/* Record Data Section */}
           <RecordDataSection 

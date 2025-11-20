@@ -5,7 +5,6 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Bell, AlertTriangle, Mail, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { toast } from 'react-hot-toast';
 
 interface Anomaly {
   anomaly_id: number;
@@ -22,9 +21,10 @@ interface Anomaly {
 
 interface AlertsSectionProps {
   selectedCowId?: string;
+  onShowToast?: (message: string, type: 'success' | 'error') => void;
 }
 
-export default function AlertsSection({ selectedCowId }: AlertsSectionProps) {
+export default function AlertsSection({ selectedCowId, onShowToast }: AlertsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [alerts, setAlerts] = useState<Anomaly[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +74,7 @@ export default function AlertsSection({ selectedCowId }: AlertsSectionProps) {
 
   const handleResendEmail = async (alert: Anomaly) => {
     if (!alert.farmer_email) {
-      toast.error('No farmer email configured for this alert');
+      showNotification('No farmer email configured for this alert', 'error');
       return;
     }
 
@@ -84,16 +84,13 @@ export default function AlertsSection({ selectedCowId }: AlertsSectionProps) {
       const response = await api.ml.resendAnomalyEmail(alert.anomaly_id);
       
       if (response.success) {
-        toast.success(`✓ Alert email sent to ${alert.farmer_email}`, {
-          icon: '📧',
-          duration: 4000,
-        });
+        showNotification(`✓ Alert email sent to ${alert.farmer_email}`, 'success');
       } else {
-        toast.error(response.error || 'Failed to send email');
+        showNotification(response.error || 'Failed to send email', 'error');
       }
     } catch (error) {
       console.error('Error sending email:', error);
-      toast.error('Network error while sending email');
+      showNotification('Network error while sending email', 'error');
     } finally {
       setResendingEmail(null);
     }
