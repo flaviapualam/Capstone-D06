@@ -487,7 +487,7 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
               <Weight className="w-5 h-5 text-orange-500" />
               <CardTitle>Feed Weight Trend</CardTitle>
             </div>
-            <span className="text-sm font-normal text-gray-500">kg</span>
+            <span className="text-sm font-normal text-gray-500">grams</span>
           </div>
         </CardHeader>
           <CardContent>
@@ -510,7 +510,7 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
                       border: '1px solid #ccc',
                       borderRadius: '4px',
                     }}
-                    formatter={(value: any) => `${value.toFixed(2)} kg`}
+                    formatter={(value: any) => `${value.toFixed(2)} grams`}
                   />
                   <Line
                     type="monotone"
