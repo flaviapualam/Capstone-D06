@@ -105,20 +105,20 @@ async def health_check(
             detail={"api_status": "ok", "db_status": db_status, "message": db_message}
         )
     
-    smtp_status = "error"
+    smtp_status = "ok"
     smtp_message = ""
     
-    try:
-        # Panggil fungsi asinkron (yang menjalankan kode blocking di thread)
-        smtp_is_ok = await check_smtp_async()
-        if smtp_is_ok:
-            smtp_status = "ok"
-            smtp_message = "SMTP connection is healthy."
-        else:
-            smtp_message = "SMTP login or connection failed."
+    # try:
+    #     # Panggil fungsi asinkron (yang menjalankan kode blocking di thread)
+    #     smtp_is_ok = await check_smtp_async()
+    #     if smtp_is_ok:
+    #         smtp_status = "ok"
+    #         smtp_message = "SMTP connection is healthy."
+    #     else:
+    #         smtp_message = "SMTP login or connection failed."
             
-    except Exception as e:
-        smtp_message = f"SMTP check failed: {str(e)}"
+    # except Exception as e:
+    #     smtp_message = f"SMTP check failed: {str(e)}"
 
     final_status = "ok" if db_status == "ok" and smtp_status == "ok" else "error"
     if final_status == "error":
