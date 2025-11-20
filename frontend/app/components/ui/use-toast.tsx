@@ -63,32 +63,46 @@ function Toaster() {
 
   return (
     <div className="fixed top-0 right-0 z-50 w-full max-w-sm p-4 space-y-4">
-      {toasts.map((toast) => (
-        <div
-          key={toast.id}
-          className={cn(
-            "relative flex w-full rounded-lg border p-4 shadow-lg",
-            toast.variant === "destructive"
-              ? "bg-destructive text-destructive-foreground"
-              : "bg-background"
-          )}
-        >
-          <div className="flex-1">
-            {toast.title && (
-              <div className="font-semibold">{toast.title}</div>
+      {toasts.map((toast) => {
+        let style = {};
+        if (toast.variant === "destructive") {
+          style = {
+            backgroundColor: "#fef2f2",
+            borderColor: "#fecaca",
+            color: "#991b1b",
+          };
+        } else {
+          style = {
+            backgroundColor: "#eff6ff",
+            borderColor: "#bfdbfe",
+            color: "#1e40af",
+          };
+        }
+        return (
+          <div
+            key={toast.id}
+            className={cn(
+              "relative flex w-full rounded-lg border p-4 shadow-lg"
             )}
-            {toast.description && (
-              <div className="text-sm opacity-90">{toast.description}</div>
-            )}
-          </div>
-          <button
-            onClick={() => removeToast(toast.id)}
-            className="absolute top-2 right-2 rounded-md p-1 hover:bg-muted"
+            style={style}
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
+            <div className="flex-1">
+              {toast.title && (
+                <div className="font-semibold">{toast.title}</div>
+              )}
+              {toast.description && (
+                <div className="text-sm opacity-90">{toast.description}</div>
+              )}
+            </div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="absolute top-2 right-2 rounded-md p-1 hover:bg-muted"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   )
 }

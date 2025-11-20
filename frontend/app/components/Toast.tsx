@@ -34,16 +34,36 @@ function ToastItem({ toast, onRemove }: { toast: ToastMessage; onRemove: (id: st
     return () => clearTimeout(timer);
   }, [toast.id, toast.duration, onRemove]);
 
-  const bgColor = {
-    success: 'bg-green-50 border-green-200 text-green-800',
-    error: 'bg-red-50 border-red-200 text-red-800',
-    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-    info: 'bg-blue-50 border-blue-200 text-blue-800',
-  }[toast.type || 'info'];
+    const bgColor = {
+      success: 'bg-green-50 border-green-200 text-green-800',
+      error: 'bg-red-50 border-red-200 text-red-800',
+      warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+      info: 'bg-blue-50 border-blue-200 text-blue-800',
+    }[toast.type || 'info'];
+
+    // Always apply a fallback background for visibility
+    const style = {
+      backgroundColor:
+        toast.type === 'success' ? '#ecfdf5' :
+        toast.type === 'error' ? '#fef2f2' :
+        toast.type === 'warning' ? '#fefce8' :
+        '#eff6ff',
+      borderColor:
+        toast.type === 'success' ? '#bbf7d0' :
+        toast.type === 'error' ? '#fecaca' :
+        toast.type === 'warning' ? '#fde68a' :
+        '#bfdbfe',
+      color:
+        toast.type === 'success' ? '#166534' :
+        toast.type === 'error' ? '#991b1b' :
+        toast.type === 'warning' ? '#92400e' :
+        '#1e40af',
+    };
 
   return (
     <div
-      className={`min-w-[300px] max-w-md p-4 rounded-lg border shadow-lg flex items-start gap-3 animate-in slide-in-from-right ${bgColor}`}
+      className={`min-w-[300px] max-w-md p-4 rounded-lg border shadow-lg flex items-start gap-3 animate-in slide-in-from-right`}
+      style={style}
     >
       <p className="flex-1 text-sm font-medium">{toast.message}</p>
       <button
