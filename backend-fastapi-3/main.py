@@ -105,7 +105,7 @@ async def health_check(
             detail={"api_status": "ok", "db_status": db_status, "message": db_message}
         )
     
-    mtp_status = "error"
+    smtp_status = "error"
     smtp_message = ""
     
     try:
