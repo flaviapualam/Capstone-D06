@@ -7,6 +7,7 @@ from db.postgresql import connect_to_db, close_db_connection, get_db_connection
 import asyncio
 from fastapi import Request
 
+from services.email import check_smtp_async
 from api.api_router import api_router
 from mqtt.client import mqtt_listener_task, session_timeout_checker_task
 from ml.tasks import periodic_training_task, periodic_prediction_task
@@ -103,11 +104,39 @@ async def health_check(
             status_code=503, 
             detail={"api_status": "ok", "db_status": db_status, "message": db_message}
         )
+    
+    mtp_status = "error"
+    smtp_message = ""
+    
+    try:
+        # Panggil fungsi asinkron (yang menjalankan kode blocking di thread)
+        smtp_is_ok = await check_smtp_async()
+        if smtp_is_ok:
+            smtp_status = "ok"
+            smtp_message = "SMTP connection is healthy."
+        else:
+            smtp_message = "SMTP login or connection failed."
+            
+    except Exception as e:
+        smtp_message = f"SMTP check failed: {str(e)}"
 
-    return {"api_status": "ok", "db_status": db_status, "message": db_message}
+    final_status = "ok" if db_status == "ok" and smtp_status == "ok" else "error"
+    if final_status == "error":
+        raise HTTPException(
+            status_code=503, 
+            detail={
+                "api_status": "error", 
+                "db_status": db_status, 
+                "smtp_status": smtp_status, 
+                "message": f"DB: {db_message} | SMTP: {smtp_message}"
+            }
+        )
 
-# @app.options("/{path:path}")
-# async def preflight_handler(path: str, request: Request):
-#     return {}
+    return {
+        "api_status": final_status, 
+        "db_status": db_status, 
+        "smtp_status": smtp_status,
+        "message": "All critical services are healthy."
+    }
 
 app.include_router(api_router, prefix="")
