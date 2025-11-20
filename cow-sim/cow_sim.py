@@ -102,7 +102,8 @@ class CowFeedSimulator:
             # Contoh jam makan: 7 pagi dan 1 siang
             if now.hour == 7 or now.hour == 13: 
                 print(f"\n[JADWAL] ⏰ Refill otomatis pukul {now.hour}:00.")
-                self.refill_feed(10000.0) # 10kg = 10000g
+                amount = random.uniform(5000.0, 8000.0)
+                self.refill_feed(amount) # 10kg = 10000g
                 self.last_scheduled_hour = now.hour
 
         # Update Suhu
