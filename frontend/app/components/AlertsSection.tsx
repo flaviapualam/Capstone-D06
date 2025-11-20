@@ -74,7 +74,7 @@ export default function AlertsSection({ selectedCowId, onShowToast }: AlertsSect
 
   const handleResendEmail = async (alert: Anomaly) => {
     if (!alert.farmer_email) {
-      showNotification('No farmer email configured for this alert', 'error');
+      onShowToast?.('No farmer email configured for this alert', 'error');
       return;
     }
 
@@ -84,13 +84,13 @@ export default function AlertsSection({ selectedCowId, onShowToast }: AlertsSect
       const response = await api.ml.resendAnomalyEmail(alert.anomaly_id);
       
       if (response.success) {
-        showNotification(`✓ Alert email sent to ${alert.farmer_email}`, 'success');
+        onShowToast?.(`✓ Alert email sent to ${alert.farmer_email}`, 'success');
       } else {
-        showNotification(response.error || 'Failed to send email', 'error');
+        onShowToast?.(response.error || 'Failed to send email', 'error');
       }
     } catch (error) {
       console.error('Error sending email:', error);
-      showNotification('Network error while sending email', 'error');
+      onShowToast?.('Network error while sending email', 'error');
     } finally {
       setResendingEmail(null);
     }
