@@ -6,6 +6,7 @@ from core.config import settings
 from uuid import UUID
 import asyncio
 from datetime import datetime
+import smtplib
 
 async def send_anomaly_alert(
     farmer_email: str, 
@@ -56,5 +57,26 @@ def _send_mail_blocking(msg: MIMEText, recipient_email: str):
     except Exception as e:
         print(f"FAILED TO SEND EMAIL to {recipient_email}: {e}")
 
-# Note: Anda perlu membuat crud_farmer.get_farmer_email(db, farmer_id) 
-# di file services/crud_farmer.py untuk mendapatkan email tujuan.
+
+
+def check_smtp_connection_blocking() -> bool:
+    """
+    Fungsi sinkron (blocking) untuk menguji koneksi SMTP.
+    Ini harus berjalan di thread terpisah.
+    """
+    try:
+        # Coba koneksi dan login ke server SMTP
+        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            server.quit()
+        return True
+    except Exception as e:
+        print(f"SMTP Connection Failed: {e}")
+        return False
+
+async def check_smtp_async() -> bool:
+    """
+    Wrapper asinkron untuk menjalankan pengecekan SMTP.
+    """
+    return await asyncio.to_thread(check_smtp_connection_blocking)

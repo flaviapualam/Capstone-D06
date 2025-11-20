@@ -139,8 +139,6 @@ async def finalize_session(pool: asyncpg.Pool, device_id: str, last_weight: floa
         anomaly_score, is_anomaly = await realtime_predict_and_save(
             db, session_data_to_save, state['cow_id']
         )
-        # farmer_record = await authentication.get_farmer_email_by_id(db, farmer_id)
-        # farmer_email = farmer_record['email'] if farmer_record else None
         farmer_email = await authentication.get_farmer_email_by_id(db, farmer_id)
         
         model_record = await crud_ml.get_active_model_for_cow(db, state['cow_id'])
