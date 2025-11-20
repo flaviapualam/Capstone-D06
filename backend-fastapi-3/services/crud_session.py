@@ -1,7 +1,8 @@
 # services/crud_session.py
 import asyncpg
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List, Optional
 
 async def get_active_cow_by_rfid(db: asyncpg.Connection, rfid_id: str) -> UUID | None:
     if not rfid_id:
@@ -47,3 +48,105 @@ async def create_eat_session(
         return session_id
     except Exception as e:
         print(f"Error creating eat_session: {e}")
+
+async def get_eating_sessions(
+    conn: asyncpg.Connection,
+    cow_id: UUID,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None
+) -> List[dict]:
+    """Get eating sessions for a cow from view"""
+    query = """
+        SELECT 
+            session_id,
+            timestamp,
+            eat_duration,
+            feed_weight,
+            eat_speed,
+            temperature,
+            is_anomaly
+        FROM eating_session_detail
+        WHERE cow_id = $1
+    """
+    params = [cow_id]
+    
+    if start_date:
+        query += " AND timestamp >= $2"
+        params.append(start_date)
+    
+    if end_date:
+        query += f" AND timestamp <= ${len(params) + 1}"
+        params.append(end_date)
+    
+    query += " ORDER BY timestamp DESC"
+    
+    rows = await conn.fetch(query, *params)
+    return [dict(row) for row in rows]
+
+async def get_daily_summary(
+    conn: asyncpg.Connection,
+    cow_id: UUID,
+    days: int = 7
+) -> List[dict]:
+    """Get daily summary for a cow"""
+    query = """
+        SELECT 
+            date,
+            total_sessions,
+            total_eat_duration,
+            total_feed_weight,
+            avg_temperature,
+            anomaly_count
+        FROM daily_eating_summary
+        WHERE cow_id = $1
+        AND date >= CURRENT_DATE - $2
+        ORDER BY date ASC
+    """
+    rows = await conn.fetch(query, cow_id, days)
+    return [dict(row) for row in rows]
+
+async def get_weekly_summary(
+    conn: asyncpg.Connection,
+    cow_id: UUID,
+    weeks: int = 4
+) -> List[dict]:
+    """Get weekly summary for a cow"""
+    query = """
+        SELECT 
+            week_start,
+            week_end,
+            total_sessions,
+            total_eat_duration,
+            total_feed_weight,
+            avg_temperature,
+            anomaly_count
+        FROM weekly_eating_summary
+        WHERE cow_id = $1
+        AND week_start >= CURRENT_DATE - ($2 * 7)
+        ORDER BY week_start DESC
+    """
+    rows = await conn.fetch(query, cow_id, weeks)
+    return [dict(row) for row in rows]
+
+async def get_sessions_for_date(
+    conn: asyncpg.Connection,
+    cow_id: UUID,
+    date: str
+) -> List[dict]:
+    """Get all sessions for a specific date"""
+    query = """
+        SELECT 
+            session_id,
+            timestamp,
+            eat_duration,
+            feed_weight,
+            eat_speed,
+            temperature,
+            is_anomaly
+        FROM eating_session_detail
+        WHERE cow_id = $1
+        AND DATE(timestamp) = $2
+        ORDER BY timestamp ASC
+    """
+    rows = await conn.fetch(query, cow_id, date)
+    return [dict(row) for row in rows]

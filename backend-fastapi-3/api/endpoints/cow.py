@@ -1,7 +1,7 @@
 # api/endpoints/cows.py
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from uuid import UUID
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timedelta
 
 from schemas.cow import CowCreate, CowUpdate, CowResponse
@@ -13,6 +13,12 @@ from schemas.cow_pregnancy import (
 )
 from schemas.sensor import SensorDataPoint
 from services import crud_cow, crud_cow_pregnancy, crud_sensor
+from services.crud_session import (
+    get_eating_sessions,
+    get_daily_summary,
+    get_weekly_summary,
+    get_sessions_for_date
+)
 from db.postgresql import get_db_connection
 from core.security import get_current_farmer
 import asyncpg
@@ -149,13 +155,14 @@ async def get_cow_sensor_history(
     # 1. Validasi kepemilikan sapi (otomatis)
     cow: dict = Depends(get_cow_and_verify_ownership),
     # 2. Ambil parameter query (misal: /sensor_history?hours=2)
-    #    Defaultnya adalah 1 jam terakhir.
-    hours: int = Query(default=1, ge=1, le=24), 
+    #    Defaultnya adalah 24 jam terakhir. Max 720 jam (30 hari)
+    hours: int = Query(default=24, ge=1, le=720), 
     db: asyncpg.Connection = Depends(get_db_connection)
 ):
     """
     Mengambil data sensor mentah (historis) untuk seekor sapi.
     Berguna untuk mengisi grafik di frontend sebelum SSE dimulai.
+    Max: 720 jam (30 hari), Default: 24 jam
     """
     # 3. Tentukan rentang waktu
     end_time = datetime.now()
@@ -170,3 +177,86 @@ async def get_cow_sensor_history(
     )
     
     return history
+
+@router.get(
+    "/{cow_id}/eating-sessions",
+    tags=["Eating Sessions"]
+)
+async def get_cow_eating_sessions(
+    cow: dict = Depends(get_cow_and_verify_ownership),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """Get eating sessions for a cow"""
+    start = datetime.fromisoformat(start_date) if start_date else None
+    end = datetime.fromisoformat(end_date) if end_date else None
+    
+    sessions = await get_eating_sessions(db, cow['cow_id'], start, end)
+    return {"sessions": sessions}
+
+@router.get(
+    "/{cow_id}/daily-summary",
+    tags=["Eating Sessions"]
+)
+async def get_cow_daily_summary(
+    cow: dict = Depends(get_cow_and_verify_ownership),
+    days: int = Query(default=7, ge=1, le=30),
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """Get daily eating summary for a cow"""
+    summary = await get_daily_summary(db, cow['cow_id'], days)
+    
+    # Get sessions for each day
+    for day in summary:
+        day['sessions'] = await get_sessions_for_date(
+            db, 
+            cow['cow_id'], 
+            day['date'].isoformat()
+        )
+    
+    return {"daily_summaries": summary}
+
+@router.get(
+    "/{cow_id}/weekly-summary",
+    tags=["Eating Sessions"]
+)
+async def get_cow_weekly_summary(
+    cow: dict = Depends(get_cow_and_verify_ownership),
+    weeks: int = Query(default=2, ge=1, le=8),
+    db: asyncpg.Connection = Depends(get_db_connection)
+):
+    """Get weekly eating summary for a cow (current week + previous week)"""
+    summary = await get_weekly_summary(db, cow['cow_id'], weeks)
+    
+    # Get daily summaries for each week
+    for week in summary:
+        # Get days between week_start and week_end
+        week_days = await db.fetch("""
+            SELECT 
+                date,
+                total_sessions,
+                total_eat_duration,
+                total_feed_weight,
+                avg_temperature,
+                anomaly_count
+            FROM daily_eating_summary
+            WHERE cow_id = $1
+            AND date BETWEEN $2 AND $3
+            ORDER BY date ASC
+        """, cow['cow_id'], week['week_start'], week['week_end'])
+        
+        week['daily_summaries'] = [dict(d) for d in week_days]
+        
+        # Get sessions for each day
+        for day in week['daily_summaries']:
+            day['sessions'] = await get_sessions_for_date(
+                db,
+                cow['cow_id'],
+                day['date'].isoformat()
+            )
+    
+    return {
+        "current_week": summary[0] if len(summary) > 0 else None,
+        "previous_week": summary[1] if len(summary) > 1 else None
+    }
