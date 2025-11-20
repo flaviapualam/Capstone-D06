@@ -1,15 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import LoginPage from '@/app/components/LoginPage';
-import { useRouter } from 'next/navigation';
+import RegistrationPage from '@/app/components/RegistrationPage';
 
 export default function Login() {
-  const router = useRouter();
+  const [showRegistration, setShowRegistration] = useState(false);
 
-  const handleShowRegistration = () => {
-    // You can implement registration logic here or navigate to a registration page
-    console.log('Show registration clicked');
-  };
+  const handleShowRegistration = () => setShowRegistration(true);
+  const handleBackToLogin = () => setShowRegistration(false);
 
-  return <LoginPage onShowRegistration={handleShowRegistration} />;
+  return showRegistration ? (
+    <RegistrationPage onBackToLogin={handleBackToLogin} />
+  ) : (
+    <LoginPage onShowRegistration={handleShowRegistration} />
+  );
 }

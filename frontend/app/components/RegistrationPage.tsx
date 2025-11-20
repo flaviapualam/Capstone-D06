@@ -51,8 +51,9 @@ export default function RegistrationPage({ onBackToLogin }: RegistrationPageProp
       await register(formData.name, formData.email, formData.password);
       toast({
         title: "Registration successful",
-        description: `Welcome to Cattle Farm Management, ${formData.name}!`,
+        description: `Account created! Please login to continue.`,
       });
+      onBackToLogin();
     } catch (error) {
       console.error('Registration error:', error);
       toast({

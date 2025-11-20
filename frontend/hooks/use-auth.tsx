@@ -59,9 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (name: string, email: string, password: string) => {
     const response = await authApi.register({ name, email, password, confirmPassword: password });
-    if (response.success && response.data) {
-      setUser(response.data.user);
-    } else {
+    if (!response.success) {
       throw new Error(response.error || 'Registration failed');
     }
   };
