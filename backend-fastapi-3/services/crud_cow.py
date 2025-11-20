@@ -129,3 +129,11 @@ async def delete_cow(
     query = "DELETE FROM cow WHERE cow_id = $1 RETURNING *"
     deleted_cow = await db.fetchrow(query, cow_id)
     return dict(deleted_cow)
+
+async def get_farmer_id_by_cow_id(db: asyncpg.Connection, cow_id: UUID) -> UUID | None:
+    """
+    Mengambil ID Farmer dari ID Sapi yang diberikan.
+    """
+    query = "SELECT farmer_id FROM cow WHERE cow_id = $1"
+    record = await db.fetchrow(query, cow_id)
+    return record['farmer_id'] if record else None
