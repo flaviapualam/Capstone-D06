@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { LogOut, Plus, Tag, Menu, X } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -27,20 +27,20 @@ export default function Dashboard({ user }: DashboardProps) {
   const { logout } = useAuth();
   const { toasts, showToast, removeToast } = useToast();
 
-  const handleCattleRegistered = () => {
-    setRefreshCattle(!refreshCattle);
+  const handleCattleRegistered = useCallback(() => {
+    setRefreshCattle(prev => !prev);
     setShowRegistrationModal(false);
-  };
+  }, []);
 
-  const handleRfidAssigned = () => {
-    setRefreshCattle(!refreshCattle);
+  const handleRfidAssigned = useCallback(() => {
+    setRefreshCattle(prev => !prev);
     setShowRfidAssignmentModal(false);
-  };
+  }, []);
 
-  const handleCowSelect = (cowName: string, cowId?: string) => {
+  const handleCowSelect = useCallback((cowName: string, cowId?: string) => {
     setSelectedCowName(cowName);
     setSelectedCowId(cowId);
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -168,9 +168,6 @@ export default function Dashboard({ user }: DashboardProps) {
               Monitor your cattle health, activity, and feed intake from your dashboard.
             </p>
           </div>
-          
-          {/* Monitoring Section */}
-          {/* <MonitoringSection /> */}
 
           {/* Choose Cow Section */}
           <ChooseCowSection 
@@ -180,6 +177,9 @@ export default function Dashboard({ user }: DashboardProps) {
             onSuccess={showToast}
             refreshTrigger={refreshCattle}
           />
+          
+          {/* Monitoring Section - Eating Session Summary */}
+          <MonitoringSection selectedCowName={selectedCowName} />
           
           {/* Record Data Section */}
           <RecordDataSection 

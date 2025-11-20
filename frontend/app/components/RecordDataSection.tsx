@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 import { SensorReading } from '@/types';
@@ -32,95 +32,116 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  useEffect(() => {
-    const fetchSensorData = async () => {
-      setLoading(true);
-      try {
-        // Need cow ID to fetch data
-        if (!selectedCowId) {
-          console.log('No cow selected, selectedCowId:', selectedCowId);
-          setSensorData([]);
-          setLoading(false);
-          return;
-        }
-
-        if (dataMode === 'historical') {
-          // Historical mode - fetch once
-          console.log(`Fetching historical data for cow ${selectedCowId} with timeRange: ${timeRange}`);
-          
-          const response = await monitoringApi.getSensorHistory(selectedCowId, timeRange);
-          console.log('Historical data response:', response);
-          
-          if (response.success && response.data) {
-            setSensorData(response.data);
-            console.log(`Loaded ${response.data.length} historical records`);
-          } else {
-            console.error('Failed to fetch sensor history:', response.error);
-            setSensorData([]);
-          }
-          setLoading(false);
-        } else {
-          // Live mode - use SSE streaming
-          console.log(`Starting live stream for cow ${selectedCowId}`);
-          setConnectionStatus('connecting');
-          setErrorMessage('');
-          
-          // Initial load - get last 24h of data
-          const historyResponse = await monitoringApi.getSensorHistory(selectedCowId, 'today');
-          if (historyResponse.success && historyResponse.data) {
-            setSensorData(historyResponse.data);
-            console.log(`Loaded ${historyResponse.data.length} initial records for live mode`);
-          }
-          setLoading(false);
-          
-          // Connect to SSE stream
-          const eventSource = monitoringApi.createLiveStream(
-            selectedCowId,
-            (newReading) => {
-              console.log('New live data received:', newReading);
-              setIsLiveConnected(true);
-              setConnectionStatus('connected');
-              setLiveDataCount(prev => prev + 1);
-              setErrorMessage('');
-              
-              // Append new reading to existing data
-              setSensorData(prevData => {
-                const updated = [...prevData, newReading];
-                // Keep only last 1000 points to avoid memory issues
-                return updated.slice(-1000);
-              });
-            },
-            (error) => {
-              console.error('Live stream error:', error);
-              setIsLiveConnected(false);
-              setConnectionStatus('disconnected');
-              setErrorMessage(error);
-            },
-            () => {
-              // onOpen callback
-              console.log('✅ SSE connection opened');
-              setConnectionStatus('connecting'); // Still connecting until we receive first data
-            }
-          );
-          
-          // Cleanup function to close EventSource
-          return () => {
-            console.log('Closing SSE connection');
-            eventSource.close();
-            setIsLiveConnected(false);
-            setConnectionStatus('disconnected');
-            setLiveDataCount(0);
-          };
-        }
-      } catch (error) {
-        console.error('Error fetching sensor data:', error);
+  const fetchSensorData = useCallback(async () => {
+    console.log('=== fetchSensorData called ===');
+    console.log('selectedCowId:', selectedCowId);
+    console.log('selectedCowName:', selectedCowName);
+    console.log('dataMode:', dataMode);
+    console.log('timeRange:', timeRange);
+    
+    setLoading(true);
+    setErrorMessage('');
+    
+    try {
+      // Need cow ID to fetch data
+      if (!selectedCowId) {
+        console.log('❌ No cow selected, clearing data');
         setSensorData([]);
         setLoading(false);
+        return;
+      }
+
+      if (dataMode === 'historical') {
+        // Historical mode - fetch once
+        console.log(`📊 Fetching historical data for cow ${selectedCowId} (${selectedCowName}) with timeRange: ${timeRange}`);
+        
+        const response = await monitoringApi.getSensorHistory(selectedCowId, timeRange);
+        console.log('📥 Historical data response:', response);
+        
+        if (response.success && response.data) {
+          console.log(`✅ Loaded ${response.data.length} historical records`);
+          setSensorData(response.data);
+          
+          if (response.data.length === 0) {
+            setErrorMessage('No historical data found for this cow in the last 24 hours');
+          }
+        } else {
+          console.error('❌ Failed to fetch sensor history:', response.error);
+          setErrorMessage(response.error || 'Failed to fetch historical data');
+          setSensorData([]);
+        }
+        setLoading(false);
+      } else {
+        // Live mode - use SSE streaming
+        console.log(`Starting live stream for cow ${selectedCowId}`);
+        setConnectionStatus('connecting');
+        setErrorMessage('');
+        
+        // Initial load - get last 24h of data
+        const historyResponse = await monitoringApi.getSensorHistory(selectedCowId, 'today');
+        if (historyResponse.success && historyResponse.data) {
+          setSensorData(historyResponse.data);
+          console.log(`Loaded ${historyResponse.data.length} initial records for live mode`);
+        }
+        setLoading(false);
+        
+        // Connect to SSE stream
+        const eventSource = monitoringApi.createLiveStream(
+          selectedCowId,
+          (newReading) => {
+            console.log('New live data received:', newReading);
+            setIsLiveConnected(true);
+            setConnectionStatus('connected');
+            setLiveDataCount(prev => prev + 1);
+            setErrorMessage('');
+            
+            // Append new reading to existing data
+            setSensorData(prevData => {
+              const updated = [...prevData, newReading];
+              // Keep only last 1000 points to avoid memory issues
+              return updated.slice(-1000);
+            });
+          },
+          (error) => {
+            console.error('Live stream error:', error);
+            setIsLiveConnected(false);
+            setConnectionStatus('disconnected');
+            setErrorMessage(error);
+          },
+          () => {
+            // onOpen callback
+            console.log('✅ SSE connection opened');
+            setConnectionStatus('connecting'); // Still connecting until we receive first data
+          }
+        );
+        
+        // Cleanup function to close EventSource
+        return () => {
+          console.log('Closing SSE connection');
+          eventSource.close();
+          setIsLiveConnected(false);
+          setConnectionStatus('disconnected');
+          setLiveDataCount(0);
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching sensor data:', error);
+      setSensorData([]);
+      setLoading(false);
+    }
+  }, [dataMode, timeRange, selectedCowId]);
+
+  useEffect(() => {
+    const cleanup = fetchSensorData();
+    
+    return () => {
+      if (cleanup instanceof Promise) {
+        cleanup.then(cleanupFn => {
+          if (cleanupFn) cleanupFn();
+        });
       }
     };
-
-    fetchSensorData();
-  }, [dataMode, timeRange, selectedCowId]); // Re-fetch when mode, time range, or cow changes
+  }, [fetchSensorData]); // Re-fetch when mode, time range, or cow changes
 
   const getStatistics = (data: SensorReading[]) => {
     if (data.length === 0) return null;
@@ -156,11 +177,22 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
           value = 0;
         }
 
+        // Show date + time for multi-day ranges, only time for single day
+        const timeLabel = timeRange === 'today' 
+          ? new Date(reading.timeGenerated).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : new Date(reading.timeGenerated).toLocaleDateString('en-US', {
+              month: 'numeric',
+              day: 'numeric',
+            }) + ' ' + new Date(reading.timeGenerated).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+
         return {
-          time: new Date(reading.timeGenerated).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          time: timeLabel,
           value,
           isAnomaly: reading.isAnomaly || false,
           timestamp: reading.timeGenerated,
@@ -189,9 +221,12 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
   const feedWeightData = prepareChartData('feedWeight');
   const temperatureData = prepareChartData('temperature');
 
-  // Note: Backend max is 24 hours, so all options fetch 24h data
+  // Time range options - now backend supports up to 30 days
   const timeRangeOptions: { label: string; value: TimeRange }[] = [
     { label: 'Last 24 Hours', value: 'today' },
+    { label: 'Last 2 Days', value: '2days' },
+    { label: 'Last 7 Days', value: '7days' },
+    { label: 'Last 30 Days', value: '30days' },
   ];
 
   if (loading) {
@@ -234,10 +269,28 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
                 onChange={(e) => setDataMode(e.target.value as DataMode)}
                 className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-900"
               >
-                <option value="historical">Historical (Last 24h)</option>
+                <option value="historical">Historical</option>
                 <option value="live">Live Streaming (Real-time)</option>
               </select>
             </div>
+
+            {/* Time Range Selector - Only for Historical Mode */}
+            {dataMode === 'historical' && (
+              <div className="flex flex-col">
+                <label className="text-sm font-medium text-gray-700 mb-2">Time Range</label>
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white text-gray-900"
+                >
+                  {timeRangeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Live Status Indicator */}
             {dataMode === 'live' && (
@@ -293,6 +346,34 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
           </div>
         )}
         
+        {/* No cow selected for Historical Mode */}
+        {dataMode === 'historical' && !selectedCowId && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <div className="text-blue-600 text-sm">
+                <p className="font-medium">ℹ️ Please select a cow first</p>
+                <p className="text-xs text-blue-500 mt-1">
+                  Historical data will load once you select a cow from the list above
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Error Message Banner */}
+        {errorMessage && dataMode === 'historical' && selectedCowId && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <div className="text-amber-700 text-sm">
+                <p className="font-medium">⚠️ {errorMessage}</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  This cow may not have sensor data yet. Try selecting a different cow or check if the RFID is assigned.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {dataMode === 'live' && selectedCowId && connectionStatus === 'connecting' && (
           <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex items-start gap-2">
@@ -327,8 +408,11 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="time"
-                    tick={{ fontSize: 12 }}
-                    interval={Math.max(0, Math.floor(temperatureData.length / 6))}
+                    tick={{ fontSize: 11 }}
+                    angle={timeRange === 'today' ? 0 : -45}
+                    textAnchor={timeRange === 'today' ? 'middle' : 'end'}
+                    height={timeRange === 'today' ? 30 : 70}
+                    interval={Math.max(0, Math.floor(temperatureData.length / (timeRange === 'today' ? 6 : 8)))}
                   />
                   <YAxis domain={getTemperatureDomain()} tick={{ fontSize: 12 }} />
                   <Tooltip
@@ -372,8 +456,22 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
                         Temperature data will appear when cow starts eating activity
                       </p>
                     </>
+                  ) : !selectedCowId ? (
+                    <>
+                      <Thermometer className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-base font-medium">Select a cow to view data</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        Choose a cow from the list above to see temperature trends
+                      </p>
+                    </>
                   ) : (
-                    <p className="text-base">No data available for selected period</p>
+                    <>
+                      <Thermometer className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-base font-medium">No data available for selected period</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        {selectedCowName ? `${selectedCowName} has no sensor data in the last 24 hours` : 'Try selecting a different cow'}
+                      </p>
+                    </>
                   )}
                 </div>
               </div>
@@ -399,8 +497,11 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="time"
-                    tick={{ fontSize: 12 }}
-                    interval={Math.max(0, Math.floor(feedWeightData.length / 6))}
+                    tick={{ fontSize: 11 }}
+                    angle={timeRange === 'today' ? 0 : -45}
+                    textAnchor={timeRange === 'today' ? 'middle' : 'end'}
+                    height={timeRange === 'today' ? 30 : 70}
+                    interval={Math.max(0, Math.floor(feedWeightData.length / (timeRange === 'today' ? 6 : 8)))}
                   />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip
@@ -444,8 +545,22 @@ export default function RecordDataSection({ selectedCowName, selectedCowId }: Re
                         Feed weight data will appear when cow starts eating activity
                       </p>
                     </>
+                  ) : !selectedCowId ? (
+                    <>
+                      <Weight className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-base font-medium">Select a cow to view data</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        Choose a cow from the list above to see feed weight trends
+                      </p>
+                    </>
                   ) : (
-                    <p className="text-base">No data available for selected period</p>
+                    <>
+                      <Weight className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-base font-medium">No data available for selected period</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        {selectedCowName ? `${selectedCowName} has no sensor data in the last 24 hours` : 'Try selecting a different cow'}
+                      </p>
+                    </>
                   )}
                 </div>
               </div>
