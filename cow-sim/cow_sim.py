@@ -102,7 +102,8 @@ class CowFeedSimulator:
             # Contoh jam makan: 7 pagi dan 1 siang
             if now.hour == 7 or now.hour == 13: 
                 print(f"\n[JADWAL] ⏰ Refill otomatis pukul {now.hour}:00.")
-                self.refill_feed(10000.0) # 10kg = 10000g
+                amount = random.uniform(5000.0, 8000.0)
+                self.refill_feed(amount) # 10kg = 10000g
                 self.last_scheduled_hour = now.hour
 
         # Update Suhu
@@ -128,12 +129,12 @@ class CowFeedSimulator:
             self.is_eating = not self.is_eating
             if self.is_eating:
                 # Sesi Makan (Durasi acak 1-3 menit)
-                self.state_end_time = self._get_duration(1, 1) 
+                self.state_end_time = self._get_duration(15, 30) 
                 self.current_base_rate = self._get_random_base_rate()
                 print(f"\n[SAPI] 😋 MAKAN. Base Rate Sesi Ini: {self.current_base_rate:.2f} g/jam. Selesai: {self.state_end_time.strftime('%H:%M:%S')}")
             else:
                 # Sesi Istirahat (Durasi acak 2-4 menit)
-                self.state_end_time = self._get_duration(1, 1) 
+                self.state_end_time = self._get_duration(2, 10) 
                 print(f"\n[SAPI] 😴 ISTIRAHAT. Sampai: {self.state_end_time.strftime('%H:%M:%S')}")
 
     def process_consumption(self, interval_seconds):
