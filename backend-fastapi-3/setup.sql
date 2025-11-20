@@ -135,3 +135,64 @@ ADD COLUMN average_temp DECIMAL(5, 2);
 
 ALTER TABLE eat_session 
 ALTER COLUMN average_temp TYPE FLOAT USING average_temp::float;
+
+CREATE OR REPLACE VIEW eating_session_detail AS
+SELECT
+    es.session_id,
+    es.cow_id,
+    es.device_id,
+    es.rfid_id,
+    es.time_start AS timestamp,
+    -- Durasi Makan (dalam detik)
+    EXTRACT(EPOCH FROM (es.time_end - es.time_start)) AS eat_duration, 
+    -- Berat Pakan (dalam kg atau satuan berat yang Anda gunakan)
+    (es.weight_start - es.weight_end) AS feed_weight, 
+    -- Kecepatan Makan (Berat Pakan / Durasi)
+    (es.weight_start - es.weight_end) / EXTRACT(EPOCH FROM (es.time_end - es.time_start)) AS eat_speed,
+    -- Suhu Rata-rata
+    es.average_temp AS temperature,
+    -- Status Anomali
+    COALESCE(a.is_anomaly, FALSE) AS is_anomaly
+FROM
+    eat_session es
+LEFT JOIN
+    anomaly a ON es.session_id = a.session_id;
+
+-- Opsional: Buat juga view summary untuk fungsi-fungsi lain:
+
+CREATE OR REPLACE VIEW daily_eating_summary AS
+SELECT
+    es.cow_id,
+    DATE(es.time_start) AS date,
+    COUNT(es.session_id) AS total_sessions,
+    SUM(EXTRACT(EPOCH FROM (es.time_end - es.time_start))) AS total_eat_duration,
+    SUM(es.weight_start - es.weight_end) AS total_feed_weight,
+    AVG(es.average_temp) AS avg_temperature,
+    SUM(CASE WHEN COALESCE(a.is_anomaly, FALSE) = TRUE THEN 1 ELSE 0 END) AS anomaly_count
+FROM
+    eat_session es
+LEFT JOIN
+    anomaly a ON es.session_id = a.session_id
+GROUP BY
+    es.cow_id,
+    DATE(es.time_start);
+
+CREATE OR REPLACE VIEW weekly_eating_summary AS
+SELECT
+    es.cow_id,
+    DATE_TRUNC('week', es.time_start) AS week_start,
+    DATE_TRUNC('week', es.time_start) + INTERVAL '6 days' AS week_end,
+    COUNT(es.session_id) AS total_sessions,
+    SUM(EXTRACT(EPOCH FROM (es.time_end - es.time_start))) AS total_eat_duration,
+    SUM(es.weight_start - es.weight_end) AS total_feed_weight,
+    AVG(es.average_temp) AS avg_temperature,
+    SUM(CASE WHEN COALESCE(a.is_anomaly, FALSE) = TRUE THEN 1 ELSE 0 END) AS anomaly_count
+FROM
+    eat_session es
+LEFT JOIN
+    anomaly a ON es.session_id = a.session_id
+GROUP BY
+    es.cow_id,
+    week_start
+ORDER BY
+    week_start;

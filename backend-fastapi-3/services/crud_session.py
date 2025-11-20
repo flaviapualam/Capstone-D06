@@ -1,7 +1,7 @@
 # services/crud_session.py
 import asyncpg
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import List, Optional
 
 async def get_active_cow_by_rfid(db: asyncpg.Connection, rfid_id: str) -> UUID | None:
@@ -99,7 +99,8 @@ async def get_daily_summary(
             anomaly_count
         FROM daily_eating_summary
         WHERE cow_id = $1
-        AND date >= CURRENT_DATE - $2
+        -- KOREKSI DENGAN INTERVAL EXPLISIT: CURRENT_DATE - (jumlah hari * 1 hari)
+        AND date >= CURRENT_DATE - ($2 * INTERVAL '1 day') 
         ORDER BY date ASC
     """
     rows = await conn.fetch(query, cow_id, days)
@@ -122,7 +123,8 @@ async def get_weekly_summary(
             anomaly_count
         FROM weekly_eating_summary
         WHERE cow_id = $1
-        AND week_start >= CURRENT_DATE - ($2 * 7)
+        -- KOREKSI DENGAN INTERVAL EXPLISIT: CURRENT_DATE - (jumlah minggu * 7 hari)
+        AND week_start >= CURRENT_DATE - ($2 * INTERVAL '7 days') 
         ORDER BY week_start DESC
     """
     rows = await conn.fetch(query, cow_id, weeks)
@@ -131,9 +133,15 @@ async def get_weekly_summary(
 async def get_sessions_for_date(
     conn: asyncpg.Connection,
     cow_id: UUID,
-    date: str
+    date_str: str # Renamed parameter for clarity
 ) -> List[dict]:
-    """Get all sessions for a specific date"""
+    """Get all sessions for a specific date"""    
+    try:
+        query_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        print(f"Invalid date format received: {date_str}")
+        return []
+
     query = """
         SELECT 
             session_id,
@@ -145,8 +153,8 @@ async def get_sessions_for_date(
             is_anomaly
         FROM eating_session_detail
         WHERE cow_id = $1
-        AND DATE(timestamp) = $2
+        AND DATE(timestamp) = $2 
         ORDER BY timestamp ASC
     """
-    rows = await conn.fetch(query, cow_id, date)
+    rows = await conn.fetch(query, cow_id, query_date) 
     return [dict(row) for row in rows]
